@@ -65,16 +65,16 @@ public:
 
     // 设置相机参数
     // 这是前置相机的参数
-    /*K1.at<double>(0, 0) = 644.25537;
+    K1.at<double>(0, 0) = 644.25537;
     K1.at<double>(1, 1) = 643.36945;
     K1.at<double>(0, 2) = 642.71234;
-    K1.at<double>(1, 2) = 359.95392;*/
+    K1.at<double>(1, 2) = 359.95392;
 
     // 这是下置相机的参数
-    K1.at<double>(0, 0) = 492.095404;
+    /*K1.at<double>(0, 0) = 492.095404;
     K1.at<double>(1, 1) = 504.902065;
     K1.at<double>(0, 2) = 340.221950;
-    K1.at<double>(1, 2) = 151.780080;
+    K1.at<double>(1, 2) = 151.780080;*/
 
     cam_info.tagsize = tagSize;
     cam_info.fx = K1.at<double>(0, 0); // 获取相机的焦距和像素
@@ -82,8 +82,8 @@ public:
     cam_info.cx = K1.at<double>(0, 2);
     cam_info.cy = K1.at<double>(1, 2);
 
-    // forward_cam_sub_ = nh_.subscribe("/camera/color/image_raw", 1, &AprilTagProcessor::forwardimageCallback, this);
-    forward_cam_sub_ = nh_.subscribe("/usb_cam/image_raw", 1, &AprilTagProcessor::forwardimageCallback, this);
+    forward_cam_sub_ = nh_.subscribe("/camera/color/image_raw", 1, &AprilTagProcessor::forwardimageCallback, this);
+    //forward_cam_sub_ = nh_.subscribe("/usb_cam/image_raw", 1, &AprilTagProcessor::forwardimageCallback, this);
     odom_sub_ = nh_.subscribe("/vins_fusion/imu_propagate", 1, &AprilTagProcessor::odomCallback, this);
     // path_pub_ = nh_.advertise<nav_msgs::Path>("/apriltag_path", 10);
     point_pub_ = nh_.advertise<std_msgs::Float64MultiArray>("/point_with_unfixed_delay", 10);
@@ -165,10 +165,10 @@ public:
     tf::Matrix3x3 rot_matrix2(-0.0125414733481959, -0.0394725759038369, 0.999141945470099,
                               -0.999710607454322, -0.0200189744533413, -0.0133394904381207, 0.0205283411304649, -0.999020098102813, -0.0392100854000468);
     // 这是加入底部相机的旋转矩阵，两个相机之间朝向的粗标定。
-    tf::Matrix3x3 rot_matrix3(1, 0, 0,
-                              0, 0, 1, 0, -1, 0);
+    //tf::Matrix3x3 rot_matrix3(1, 0, 0,
+     //                         0, 0, 1, 0, -1, 0);
     // 直接计算从世界到相机的旋转矩阵，避免了多次不必要的求逆操作,面向前方的相机使用12旋转矩阵即可，底部相机加入旋转矩阵3。
-    tf::Matrix3x3 rot_matrix_cam_to_world = rot_matrix1 * rot_matrix2 * rot_matrix3;
+    tf::Matrix3x3 rot_matrix_cam_to_world = rot_matrix1 * rot_matrix2; //* rot_matrix3;
 
     for (int i = 0; i < 3; i++)
     {
