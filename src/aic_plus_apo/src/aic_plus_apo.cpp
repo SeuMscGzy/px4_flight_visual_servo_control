@@ -24,9 +24,9 @@ private:
     const double sigma_w1_inv = 1.0;
     const double sigma_w2_inv = 1.0;
     const double sigma_w3_inv = 1.0;
-    const double k_i = 8.0;
-    const double k_p = 12.0;
-    const double k_d = 6.0;
+    const double k_i = -8.0;
+    const double k_p = -12.0;
+    const double k_d = -6.0;
     const double T_c = 0.01;
     const double x_bias = 0.3;
     const double y_bias = 0.2;
@@ -201,15 +201,15 @@ public:
           first_time_in_fun(true),
           first_time_cal_2deri(false)
     {
-        A_bar << 0.427528806550694, 0.00680145698781001, 3.87378783471825e-05,
-            -5.10966079659165, 0.971645365575495, 0.00990048725558461,
-            -61.2131128902900, -0.348640905124643, 0.998761880418522;
-        B_bar << 1.33314562559021e-07,
-            4.90392216549617e-05,
-            0.00999058618730265;
-        C_bar << 0.572471193460831,
-            5.10966079668367,
-            61.2131128917304;
+        A_bar << 0.612178548232322, 0.00796154878193179, 4.30353988212529e-05,
+            -5.51928989882568, 0.970448243419253, 0.00989814172888817,
+            -26.8702271390198, -0.145244471021729, 0.999497137623598;
+        B_bar << 1.37568842851619e-07,
+            4.97433857418070e-05,
+            0.00999678544531325;
+        C_bar << 0.387821451767804,
+            5.51928989882900,
+            26.8702271390418;
         A0 << 1, 0.0100000000000000, 5.00000000000000e-05,
             0, 1, 0.0100000000000000,
             0, 0, 1;
@@ -277,11 +277,9 @@ public:
             time_pass = 0.05;
             y_real_last = y_real;
             first_time_in_fun = false;
-            hat_x = Eigen::Vector3d::Zero();
+            // hat_x = Eigen::Vector3d::Zero();
             predict_y = y_real;
-            hat_x = Eigen::Vector3d::Zero();
             hat_x(0) = y_real;
-            u = 0; // 防止看不到目标时积分过大
             aic3controller.computeControl(timer_count, 1, y_real, hat_x(0), y_filtered_deri, hat_x(1), y_filtered_2deri, hat_x(2), mu_last, mu_p_last, mu_pp_last, u_last, u, delta_u, mu, mu_p, mu_pp, use_bias, which_axis);
             // sampleddatacontroller.computeControl(hat_x(0), hat_x(1), hat_x(2), u);
             u = 0;
@@ -324,6 +322,15 @@ public:
         if (msg->data != 3) // 不在cmd模式下时，控制量为0；
         {
             u = 0;
+            u_last = 0;
+            delta_u = 0;
+            delta_u_last = 0;
+            mu = 0;
+            mu_p = 0;
+            mu_pp = 0;
+            mu_last = 0;
+            mu_p_last = 0;
+            mu_pp_last = 0;
         }
     }
 };
@@ -356,9 +363,9 @@ public:
         // 更新每个轴的控制器
         // if (abs(msg->data[0]) > 0.2 || abs(msg->data[1]) > 0.2)
         //{
-        controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
-        controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 1, 1);
-        controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2); // 定高跟踪
+        controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 0, 0);
+        controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 0, 1);
+        controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 0, 2); // 定高跟踪
         //}
         /*else if (abs(msg->data[0]) != 0 && abs(msg->data[1]) != 0) // 跟踪误差很小 可以开始边下降边跟踪
         {

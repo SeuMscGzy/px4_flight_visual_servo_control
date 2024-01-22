@@ -345,6 +345,8 @@ void PX4CtrlFSM::process()
 			Odom_Data_t odom_zero;
 			odom_zero.p = Eigen::Vector3d::Zero();
 			odom_zero.v = Eigen::Vector3d::Zero();
+			odom_zero.q = odom_data.q;
+			odom_zero.w = odom_data.w;
 			debug_msg = controller.calculateControl(des, odom_zero, imu_data, u);
 			debug_msg.header.stamp = now_time;
 			debug_pub.publish(debug_msg);
@@ -369,8 +371,8 @@ void PX4CtrlFSM::process()
 
 	// STEP5: Detect if the drone has landed
 	land_detector(state, des, odom_data);
-	cout << takeoff_land.landed << endl;
-	// fflush(stdout);
+	// cout << takeoff_land.landed << endl;
+	//  fflush(stdout);
 
 	// STEP6: Clear flags beyound their lifetime
 	rc_data.enter_hover_mode = false;

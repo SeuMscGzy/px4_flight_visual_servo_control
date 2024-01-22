@@ -42,7 +42,7 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   roll = (des_acc(0) * sin - des_acc(1) * cos) / param_.gra; // 线性化后的情况
   pitch = (des_acc(0) * cos + des_acc(1) * sin) / param_.gra;
   // yaw_imu = fromQuaternion2yaw(imu.q);
-  // cout << "pitch:" << pitch << " roll:" << roll << " yaw_odom:" << yaw_odom << " yaw_imu:" << yaw_imu << endl;
+  cout << "pitch:" << pitch << " roll:" << roll << " yaw_odom:" << yaw_odom << " yaw_imu:" << yaw_imu << endl;
   //  Eigen::Quaterniond q = Eigen::AngleAxisd(yaw,Eigen::Vector3d::UnitZ())
   //    * Eigen::AngleAxisd(roll,Eigen::Vector3d::UnitX())
   //    * Eigen::AngleAxisd(pitch,Eigen::Vector3d::UnitY());
@@ -72,7 +72,7 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   // cout << debug_msg_.des_q_x << " " << debug_msg_.des_q_y << " " << debug_msg_.des_q_z << " " << debug_msg_.des_q_w << " " << endl;
 
   debug_msg_.des_thr = u.thrust;
-  cout << u.thrust << endl;
+  //cout << u.thrust << endl;
   // Used for thrust-accel mapping estimation
   timed_thrust_.push(std::pair<ros::Time, double>(ros::Time::now(), u.thrust));
   while (timed_thrust_.size() > 100)
@@ -132,7 +132,7 @@ bool LinearControl::estimateThrustModel(
       thr2acc_ = thr2acc_ + K * (est_a(2) - thr * thr2acc_);
       P_ = (1 - K * thr) * P_ / rho2_;
     }
-    cout << thr2acc_ << endl;
+    //cout << thr2acc_ << endl;
     return true;
   }
   return false;
