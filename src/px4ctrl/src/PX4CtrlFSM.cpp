@@ -342,18 +342,20 @@ void PX4CtrlFSM::process()
 	{
 		if (state == CMD_CTRL)
 		{
+			bool is_cmd_mode = true;
 			Odom_Data_t odom_zero;
 			odom_zero.p = Eigen::Vector3d::Zero();
 			odom_zero.v = Eigen::Vector3d::Zero();
 			odom_zero.q = odom_data.q;
 			odom_zero.w = odom_data.w;
-			debug_msg = controller.calculateControl(des, odom_zero, imu_data, u);
+			debug_msg = controller.calculateControl(des, odom_zero, imu_data, u, is_cmd_mode);
 			debug_msg.header.stamp = now_time;
 			debug_pub.publish(debug_msg);
 		}
 		else
 		{
-			debug_msg = controller.calculateControl(des, odom_data, imu_data, u);
+			bool is_cmd_mode = false;
+			debug_msg = controller.calculateControl(des, odom_data, imu_data, u, is_cmd_mode);
 			debug_msg.header.stamp = now_time;
 			debug_pub.publish(debug_msg);
 		}

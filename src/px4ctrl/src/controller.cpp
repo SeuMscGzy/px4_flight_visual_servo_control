@@ -19,7 +19,7 @@ LinearControl::LinearControl(Parameter_t &param) : param_(param)
 quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State_t &des,
                                                              const Odom_Data_t &odom,
                                                              const Imu_Data_t &imu,
-                                                             Controller_Output_t &u)
+                                                             Controller_Output_t &u, bool is_cmd_mode_)
 {
   /* WRITE YOUR CODE HERE */
   // compute disired acceleration
@@ -31,9 +31,9 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   des_acc += Eigen::Vector3d(0, 0, param_.gra);
   // cout << des.p << endl;
   u.thrust = computeDesiredCollectiveThrustSignal(des_acc);
-  if (des.p[2] < -0.2 && odom.p[2] < 0.1 && des_acc[2] < param_.gra) // 在地上且推杆在底部或中部
+  if (des.p[2] < -0.2 && odom.p[2] < 0.1 && des_acc[2] < param_.gra && is_cmd_mode_==false) // 在地上或快降落到地上且推杆在底部或中部且为auto_hover模式
   {
-    u.thrust = 0;
+    u.thrust = 0.15;
   }
   double roll, pitch, yaw, yaw_imu;
   double yaw_odom = fromQuaternion2yaw(odom.q);
@@ -122,7 +122,7 @@ bool LinearControl::estimateThrustModel(
     /***********************************************************/
     double thr = t_t.second;
     timed_thrust_.pop();
-    if (thr != 0)
+    if (thr > 0.15)
     {
       /***********************************/
       /* Model: est_a(2) = thr1acc_ * thr */
