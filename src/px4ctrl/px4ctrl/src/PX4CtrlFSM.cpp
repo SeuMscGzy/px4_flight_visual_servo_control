@@ -18,18 +18,18 @@ PX4CtrlFSM::PX4CtrlFSM(Parameter_t &param_, LinearControl &controller_) : param(
 				|
 				|
 				v
-	----- > MANUAL_CTRL <-----------------
-	|         ^   |    \                 |
-	|         |   |     \                |
-	|         |   |      > AUTO_TAKEOFF  |
-	|         |   |        /             |
-	|         |   |       /              |
-	|         |   |      /               |
-	|         |   v     /                |
-	|       AUTO_HOVER <                 |
-	|         ^   |  \  \                |
-	|         |   |   \  \               |
-	|         |	  |    > AUTO_LAND -------
+	----- > MANUAL_CTRL
+	|         ^   |
+	|         |   |
+	|         |   |
+	|         |   |
+	|         |   |
+	|         |   |
+	|         |   v
+	|       AUTO_HOVER
+	|         ^   |
+	|         |   |
+	|         |	  |
 	|         |   |
 	|         |   v
 	-------- CMD_CTRL
@@ -41,7 +41,6 @@ void PX4CtrlFSM::process()
 	ros::Time now_time = ros::Time::now();
 	Controller_Output_t u;
 	Desired_State_t des(odom_data); // des代表了当前的无人机位姿，利用初始化函数读取里程计信息来给其赋值
-	bool rotor_low_speed_during_land = false;
 
 	// STEP1: state machine runs
 	switch (state)
@@ -71,73 +70,6 @@ void PX4CtrlFSM::process()
 			toggle_offboard_mode(true);
 			ROS_INFO("\033[32m[px4ctrl] MANUAL_CTRL(L1) --> AUTO_HOVER(L2)\033[32m");
 		}
-		else if (param.takeoff_land.enable && takeoff_land_data.triggered && takeoff_land_data.takeoff_land_cmd == quadrotor_msgs::TakeoffLand::TAKEOFF) // Try to jump to AUTO_TAKEOFF
-		{
-			if (!odom_is_received(now_time))
-			{
-				ROS_ERROR("[px4ctrl] Reject AUTO_TAKEOFF. No odom!");
-				break;
-			}
-			if (cmd_is_received(now_time))
-			{
-				ROS_ERROR("[px4ctrl] Reject AUTO_TAKEOFF. You are sending commands before toggling into AUTO_TAKEOFF, which is not allowed. Stop sending commands now!");
-				break;
-			}
-			if (odom_data.v.norm() > 0.1)
-			{
-				ROS_ERROR("[px4ctrl] Reject AUTO_TAKEOFF. Odom_Vel=%fm/s, non-static takeoff is not allowed!", odom_data.v.norm());
-				break;
-			}
-			if (!get_landed()) // 检测是不是在地面上
-			{
-				ROS_ERROR("[px4ctrl] Reject AUTO_TAKEOFF. land detector says that the drone is not landed now!");
-				break;
-			}
-			if (rc_is_received(now_time)) // Check this only if RC is connected.
-			{
-				if (!rc_data.is_hover_mode || !rc_data.is_command_mode || !rc_data.check_centered()) // 必须在offboard模式才可以自动起飞
-				{
-					ROS_ERROR("[px4ctrl] Reject AUTO_TAKEOFF. If you have your RC connected, keep its switches at \"auto hover\" and \"command control\" states, and all sticks at the center, then takeoff again.");
-					while (ros::ok())
-					{
-						ros::Duration(0.01).sleep();
-						ros::spinOnce();
-						if (rc_data.is_hover_mode && rc_data.is_command_mode && rc_data.check_centered())
-						{
-							ROS_INFO("\033[32m[px4ctrl] OK, you can takeoff again.\033[32m");
-							break;
-						}
-					}
-					break;
-				}
-			}
-
-			state = AUTO_TAKEOFF;
-			set_start_pose_for_takeoff_land(odom_data);
-			toggle_offboard_mode(true);				  // toggle on offboard before arm
-			for (int i = 0; i < 10 && ros::ok(); ++i) // wait for 0.1 seconds to allow mode change by FMU // mark
-			{
-				ros::Duration(0.01).sleep();
-				ros::spinOnce();
-			}
-			if (param.takeoff_land.enable_auto_arm)
-			{
-				toggle_arm_disarm(true); // 解锁
-			}
-			takeoff_land.toggle_takeoff_land_time = now_time;
-
-			ROS_INFO("\033[32m[px4ctrl] MANUAL_CTRL(L1) --> AUTO_TAKEOFF\033[32m");
-		}
-
-		/*if (rc_data.toggle_reboot) // Try to reboot. EKF2 based PX4 FCU requires reboot when its state estimator goes wrong.重启 因为卡尔曼滤波器崩了
-		{
-			if (state_data.current_state.armed)
-			{
-				ROS_ERROR("[px4ctrl] Reject reboot! Disarm the drone first!");
-				break;
-			}
-			reboot_FCU();
-		}*/
 		break;
 	}
 
@@ -159,12 +91,6 @@ void PX4CtrlFSM::process()
 				des = get_cmd_des(); // 自主控制需要改的函数
 				ROS_INFO("\033[32m[px4ctrl] AUTO_HOVER(L2) --> CMD_CTRL(L3)\033[32m");
 			}
-		}
-		else if (takeoff_land_data.triggered && takeoff_land_data.takeoff_land_cmd == quadrotor_msgs::TakeoffLand::LAND)
-		{
-			state = AUTO_LAND;
-			set_start_pose_for_takeoff_land(odom_data);
-			ROS_INFO("\033[32m[px4ctrl] AUTO_HOVER(L2) --> AUTO_LAND\033[32m");
 		}
 		else // 悬停模式可以用遥控器来悬停，如果遥控器不操作的话就是保持最开始进入悬停时的位置和偏航角
 		{
@@ -200,101 +126,17 @@ void PX4CtrlFSM::process()
 			des = get_hover_des();
 			ROS_INFO("[px4ctrl] From CMD_CTRL(L3) to AUTO_HOVER(L2)!");
 		}
-		else if (takeoff_land_data.triggered && takeoff_land_data.takeoff_land_cmd == quadrotor_msgs::TakeoffLand::LAND) // 自主控制情况下不能自主着陆
-		{
-			ROS_ERROR("[px4ctrl] Reject AUTO_LAND, which must be triggered in AUTO_HOVER. \
-					Stop sending control commands for longer than %fs to let px4ctrl return to AUTO_HOVER first.",
-					  param.msg_timeout.cmd);
-			state = AUTO_HOVER;
-			set_hov_with_odom();
-			des = get_hover_des();
-			ROS_INFO("[px4ctrl] From CMD_CTRL(L3) to AUTO_HOVER(L2)!");
-		}
 		else
 		{
 			des = get_cmd_des();
 		}
-
-		break;
-	}
-
-	case AUTO_TAKEOFF:
-	{
-		if ((now_time - takeoff_land.toggle_takeoff_land_time).toSec() < AutoTakeoffLand_t::MOTORS_SPEEDUP_TIME) // Wait for several seconds to warn prople.
-		{
-			des = get_rotor_speed_up_des(now_time);
-		}
-		else if (odom_data.p(2) >= (takeoff_land.start_pose(2) + param.takeoff_land.height)) // reach the desired height
-		{
-			state = AUTO_HOVER;
-			set_hov_with_odom();
-			ROS_INFO("\033[32m[px4ctrl] AUTO_TAKEOFF --> AUTO_HOVER(L2)\033[32m");
-
-			takeoff_land.delay_trigger.first = true;
-			takeoff_land.delay_trigger.second = now_time + ros::Duration(AutoTakeoffLand_t::DELAY_TRIGGER_TIME);
-		}
-		else
-		{
-			des = get_takeoff_land_des(param.takeoff_land.speed);
-		}
-
-		break;
-	}
-
-	case AUTO_LAND: // 悬停的按钮得拨下，自动控制的按钮也得拨下，才进入着陆环节  现在的着陆是z轴有速度 其他轴速度是0 后续需要修改的话则要修改这里
-	{
-		if (!rc_data.is_hover_mode || !odom_is_received(now_time))
-		{
-			state = MANUAL_CTRL;
-			toggle_offboard_mode(false);
-
-			ROS_WARN("[px4ctrl] From AUTO_LAND to MANUAL_CTRL(L1)!");
-		}
-		else if (!rc_data.is_command_mode)
-		{
-			state = AUTO_HOVER;
-			set_hov_with_odom();
-			des = get_hover_des();
-			ROS_INFO("[px4ctrl] From AUTO_LAND to AUTO_HOVER(L2)!");
-		}
-		else if (!get_landed())
-		{
-			des = get_takeoff_land_des(-param.takeoff_land.speed);
-		}
-		else
-		{
-			rotor_low_speed_during_land = true;
-
-			static bool print_once_flag = true;
-			if (print_once_flag)
-			{
-				ROS_INFO("\033[32m[px4ctrl] Wait for abount 10s to let the drone arm.\033[32m");
-				print_once_flag = false;
-			}
-
-			if (extended_state_data.current_extended_state.landed_state == mavros_msgs::ExtendedState::LANDED_STATE_ON_GROUND) // PX4 allows disarm after this
-			{
-				static double last_trial_time = 0; // Avoid too frequent calls
-				if (now_time.toSec() - last_trial_time > 1.0)
-				{
-					if (toggle_arm_disarm(false)) // disarm 加锁
-					{
-						print_once_flag = true;
-						state = MANUAL_CTRL;
-						toggle_offboard_mode(false); // toggle off offboard after disarm
-						ROS_INFO("\033[32m[px4ctrl] AUTO_LAND --> MANUAL_CTRL(L1)\033[32m");
-					}
-					last_trial_time = now_time.toSec();
-				}
-			}
-		}
-
 		break;
 	}
 	default:
 		break;
 	}
 
+	// STEP2: arm/disarm the drone
 	if (state == AUTO_HOVER)
 	{
 		if (param.takeoff_land.enable_auto_arm)
@@ -303,7 +145,7 @@ void PX4CtrlFSM::process()
 			{
 				if (state_data.current_state.armed)
 				{
-					// ROS_ERROR("[px4ctrl] Reject are! The drone has already armed!");
+					ROS_ERROR("[px4ctrl] Reject are! The drone has already armed!");
 				}
 				else
 				{
@@ -314,53 +156,38 @@ void PX4CtrlFSM::process()
 			{
 				if (!state_data.current_state.armed)
 				{
-					// ROS_ERROR("[px4ctrl] Reject disarm! The drone has already disarmed!");
+					ROS_ERROR("[px4ctrl] Reject disarm! The drone has already disarmed!");
 				}
 				else
 				{
 					toggle_arm_disarm(false); // 锁
 				}
-			}
+			} // Try to disarm.
 		}
 	}
 
-	// STEP2: estimate thrust model
-	/*if (state == AUTO_HOVER || state == CMD_CTRL)
-	{
-		// controller.estimateThrustModel(imu_data.a, bat_data.volt, param);
-		controller.estimateThrustModel(imu_data.a, param);
-	}*/
-
 	// STEP3: solve and update new control commands
-	if (rotor_low_speed_during_land) // used at the start of auto takeoff
+	if (state == CMD_CTRL)
 	{
-		motors_idling(imu_data, u);
+		bool is_cmd_mode = true;
+		Odom_Data_t odom_zero;
+		odom_zero.p = Eigen::Vector3d::Zero();
+		odom_zero.v = Eigen::Vector3d::Zero();
+		odom_zero.q = odom_data.q;
+		odom_zero.w = odom_data.w;
+		debug_msg = controller.calculateControl(des, odom_zero, imu_data, u, is_cmd_mode);
+		debug_msg.header.stamp = now_time;
+		debug_pub.publish(debug_msg);
 	}
 	else
 	{
-		if (state == CMD_CTRL)
-		{
-			bool is_cmd_mode = true;
-			Odom_Data_t odom_zero;
-			odom_zero.p = Eigen::Vector3d::Zero();
-			odom_zero.v = Eigen::Vector3d::Zero();
-			odom_zero.q = odom_data.q;
-			odom_zero.w = odom_data.w;
-			debug_msg = controller.calculateControl(des, odom_zero, imu_data, u, is_cmd_mode);
-			debug_msg.header.stamp = now_time;
-			debug_pub.publish(debug_msg);
-		}
-		else
-		{
-			bool is_cmd_mode = false;
-			debug_msg = controller.calculateControl(des, odom_data, imu_data, u, is_cmd_mode);
-			debug_msg.header.stamp = now_time;
-			debug_pub.publish(debug_msg);
-		}
+		bool is_cmd_mode = false;
+		debug_msg = controller.calculateControl(des, odom_data, imu_data, u, is_cmd_mode);
+		debug_msg.header.stamp = now_time;
+		debug_pub.publish(debug_msg);
 	}
 
 	// STEP4: publish control commands to mavros
-
 	publish_acceleration_ctrl(u, now_time);
 
 	// STEP5: Detect if the drone has landed
@@ -391,12 +218,6 @@ void PX4CtrlFSM::loss_target_callback(const std_msgs::Float64MultiArray::ConstPt
 			loss_target_time_count++;
 		}
 	}
-}
-
-void PX4CtrlFSM::motors_idling(const Imu_Data_t &imu, Controller_Output_t &u)
-{
-	u.q = imu.q;
-	u.acc_world = imu.a;
 }
 
 void PX4CtrlFSM::land_detector(const State_t state, const Desired_State_t &des, const Odom_Data_t &odom)
@@ -472,45 +293,6 @@ Desired_State_t PX4CtrlFSM::get_cmd_des()
 	return des;
 }
 
-Desired_State_t PX4CtrlFSM::get_rotor_speed_up_des(const ros::Time now) // 先得到takeoff_land_pose,再得到takeoff_land_des
-{
-	double delta_t = (now - takeoff_land.toggle_takeoff_land_time).toSec();
-	double des_a_z = exp((delta_t - AutoTakeoffLand_t::MOTORS_SPEEDUP_TIME) * 6.0) * 7.0 - 7.0; // Parameters 6.0 and 7.0 are just heuristic values which result in a saticfactory curve.
-	if (des_a_z > 0.1)
-	{
-		ROS_ERROR("des_a_z > 0.1!, des_a_z=%f", des_a_z);
-		des_a_z = 0.0;
-	}
-
-	Desired_State_t des;
-	des.p = takeoff_land.start_pose.head<3>();
-	des.v = Eigen::Vector3d::Zero();
-	des.a = Eigen::Vector3d(0, 0, des_a_z);
-	des.j = Eigen::Vector3d::Zero();
-	des.yaw = takeoff_land.start_pose(3);
-	des.yaw_rate = 0.0;
-
-	return des;
-}
-
-Desired_State_t PX4CtrlFSM::get_takeoff_land_des(const double speed) // 先得到takeoff_land_pose,再得到takeoff_land_des
-{
-	ros::Time now = ros::Time::now();
-	double delta_t = (now - takeoff_land.toggle_takeoff_land_time).toSec() - (speed > 0 ? AutoTakeoffLand_t::MOTORS_SPEEDUP_TIME : 0); // speed > 0 means takeoff
-	// takeoff_land.last_set_cmd_time = now;
-
-	// takeoff_land.start_pose(2) += speed * delta_t;
-
-	Desired_State_t des;
-	des.p = takeoff_land.start_pose.head<3>() + Eigen::Vector3d(0, 0, speed * delta_t);
-	des.v = Eigen::Vector3d(0, 0, speed);
-	des.a = Eigen::Vector3d::Zero();
-	des.j = Eigen::Vector3d::Zero();
-	des.yaw = takeoff_land.start_pose(3);
-	des.yaw_rate = 0.0;
-
-	return des;
-}
 
 void PX4CtrlFSM::set_hov_with_odom() // 得到hov_pose 用惯性系的位置和偏航角来确定悬停的位置和偏航，因为是悬停，所以不涉及速度、加速度以及俯仰角、滚转角等
 {
@@ -532,14 +314,6 @@ void PX4CtrlFSM::set_hov_with_rc() // 得到hov_pose 用遥控器来决定无人
 
 	if (hover_pose(2) < -0.35) // 不能再往下面走了，已经在地面上了
 		hover_pose(2) = -0.35;
-}
-
-void PX4CtrlFSM::set_start_pose_for_takeoff_land(const Odom_Data_t &odom) // 得到takeoff_land_pose 起飞的时候保持姿态不变
-{
-	takeoff_land.start_pose.head<3>() = odom_data.p;
-	takeoff_land.start_pose(3) = get_yaw_from_quaternion(odom_data.q);
-
-	takeoff_land.toggle_takeoff_land_time = ros::Time::now();
 }
 
 bool PX4CtrlFSM::rc_is_received(const ros::Time &now_time)
@@ -692,20 +466,3 @@ bool PX4CtrlFSM::toggle_arm_disarm(bool arm)
 	return true;
 }
 
-void PX4CtrlFSM::reboot_FCU()
-{
-	// https://mavlink.io/en/messages/common.html, MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN(#246)
-	mavros_msgs::CommandLong reboot_srv;
-	reboot_srv.request.broadcast = false;
-	reboot_srv.request.command = 246; // MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN
-	reboot_srv.request.param1 = 1;	  // Reboot autopilot
-	reboot_srv.request.param2 = 0;	  // Do nothing for onboard computer
-	reboot_srv.request.confirmation = true;
-
-	reboot_FCU_srv.call(reboot_srv);
-
-	ROS_INFO("Reboot FCU");
-
-	// if (param.print_dbg)
-	// 	printf("reboot result=%d(uint8_t), success=%d(uint8_t)\n", reboot_srv.response.result, reboot_srv.response.success);
-}
