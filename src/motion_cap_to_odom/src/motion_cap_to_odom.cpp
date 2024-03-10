@@ -33,8 +33,8 @@ int main(int argc, char **argv)
     odom_pub = nh.advertise<nav_msgs::Odometry>("/vins_fusion/imu_propagate", 50);
 
     // 设置message_filters订阅器
-    message_filters::Subscriber<geometry_msgs::PoseStamped> pose_sub(nh, "/vrpn_client_node/MCServer/3/pose", 10);
-    message_filters::Subscriber<geometry_msgs::TwistStamped> twist_sub(nh, "/vrpn_client_node/MCServer/3/velocity", 10);
+    message_filters::Subscriber<geometry_msgs::PoseStamped> pose_sub(nh, "/vrpn_client_node/MCServer/5/pose", 10);
+    message_filters::Subscriber<geometry_msgs::TwistStamped> twist_sub(nh, "/vrpn_client_node/MCServer/5/velocity", 10);
 
     // 使用ApproximateTime策略同步消息
     typedef message_filters::sync_policies::ApproximateTime<geometry_msgs::PoseStamped, geometry_msgs::TwistStamped> MySyncPolicy;

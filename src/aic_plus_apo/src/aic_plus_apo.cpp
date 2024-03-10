@@ -9,6 +9,12 @@
 #include <std_msgs/Bool.h>
 #include <math.h>
 #include <std_msgs/Int32.h>
+#include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/TwistStamped.h>
+#include <geometry_msgs/AccelStamped.h>
+#include <nav_msgs/Odometry.h>
+#include <filters/filter_chain.h>
+
 using namespace std;
 
 class AIC3Controller
@@ -24,17 +30,17 @@ private:
     const double sigma_w1_inv = 1.0;
     const double sigma_w2_inv = 1.0;
     const double sigma_w3_inv = 1.0;
-    const double k_i = -8.0;
-    const double k_p = -12.0;
-    const double k_d = -6.0;
+    const double k_i = -6;
+    const double k_p = -7.5;
+    const double k_d = -2.5; // 逐渐增大
     const double T_c = 0.01;
-    const double x_bias = 0.3;
-    const double y_bias = 0.2;
-    const double z_bias = 1;
+    const double x_bias = -2.3;
+    const double y_bias = -0.2;
+    const double z_bias = 0.6;
     double y1_APO_fast_bias = 0;
     double y1_real_bias = 0;
     std::vector<double> trust_array_y1 = {1, 0.75, 0.5, 0.25, 0};
-    std::vector<double> trust_array_y2 = {0.5, 0.5, 0.5, 0.5, 0.5};
+    std::vector<double> trust_array_y2 = {0.7, 0.7, 0.7, 0.7, 0.7};
     std::vector<double> trust_array_y3 = {0.5, 0.5, 0.5, 0.5, 0.5};
 
 public:
@@ -101,6 +107,10 @@ public:
             delta_u = T_c * (k_i * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu)) + k_p * ((1 - trust_param_y2) * (y2_APO_fast - mu_p) + trust_param_y2 * (y2_derivative_sampling - mu_p)) + k_d * ((1 - trust_param_y3) * (y3_APO_fast - mu_pp) + trust_param_y3 * (y3_real_slow - mu_pp)));
             u = double(u_last - delta_u);
         }
+        if (abs(u) >= 0.3) // 控制量限幅
+        {
+            u = 0.3 * u / abs(u);
+        }
     }
 };
 
@@ -141,7 +151,7 @@ class MyController
 private:
     Eigen::Vector3d hat_x_last, hat_x, B_bar, C_bar, B0;
     std::atomic<double> u;
-    double predict_y, predict_y_last, y_real, u_last, delta_u, delta_u_last, t_now;
+    double predict_y, predict_y_last, y_real, u_last, delta_u, delta_u_last, t_now, measure;
     Eigen::Matrix3d A_bar, A0;
     double y_real_last, y_real_derivative_last;
     double y_real_derivative, y_real_second_derivative, y_filtered_deri, y_filtered_2deri;
@@ -152,7 +162,10 @@ private:
     int timer_count;
     ros::NodeHandle nh;
     double time_now, time_last, time_pass;
-    LowPassFilter filter_for_deri, filter_for_2deri;
+    LowPassFilter filter_for_img, filter_for_deri, filter_for_2deri; // 一阶LPF
+    filters::FilterChain<double> filter_for_img_;                    // 二阶LPF
+    filters::FilterChain<double> filter_for_deri_;                   // 二阶LPF
+    filters::FilterChain<double> filter_for_2deri_;                  // 二阶LPF
     AIC3Controller aic3controller;
     // SampledDataController sampleddatacontroller;
     ros::Subscriber px4_state_sub;
@@ -171,6 +184,7 @@ public:
           predict_y_last(0.0),
           predict_y(0.0),
           y_real(0.0),
+          measure(0.0),
           u(0.0),
           u_last(0.0),
           delta_u(0.0),
@@ -190,8 +204,12 @@ public:
           mu_p_last(0.0),
           mu_pp_last(0.0),
           timer_count(0),
-          filter_for_deri(0.4),
-          filter_for_2deri(0.3),
+          filter_for_img(0.98),  // 0.8 is well
+          filter_for_deri(0.35), // 0.41 is well
+          filter_for_2deri(0.12),
+          filter_for_img_("double"),
+          filter_for_deri_("double"),
+          filter_for_2deri_("double"),
           y_filtered_deri(0),
           y_filtered_2deri(0),
           loss_target(true),
@@ -201,15 +219,31 @@ public:
           first_time_in_fun(true),
           first_time_cal_2deri(false)
     {
-        A_bar << 0.612178548232322, 0.00796154878193179, 4.30353988212529e-05,
-            -5.51928989882568, 0.970448243419253, 0.00989814172888817,
-            -26.8702271390198, -0.145244471021729, 0.999497137623598;
+        /*A_bar << 0.623259374964953, 0.00802308176860213, 4.32511146555371e-05,
+            -5.19241525496253, 0.972263431899145, 0.00990450525611799,
+            -24.4593676568047, -0.131856429416737, 0.999544072468126;
         B_bar << 1.37568842851619e-07,
             4.97433857418070e-05,
             0.00999678544531325;
-        C_bar << 0.387821451767804,
-            5.51928989882900,
-            26.8702271390418;
+        C_bar << 0.376740625035147,
+            5.19241525496506,
+            24.4593676568210;*/
+        A_bar << 0.753124993222755, 0.00872804281934023, 4.56965592635614e-05,
+            -2.15422719680281, 0.988782149344942, 0.00996184991945639,
+            -6.36274321529903, -0.0333127917031363, 0.999886413245987;
+        B_bar << 1.37568842851619e-07,
+            4.97433857418070e-05,
+            0.00999678544531325;
+        C_bar << 0.246875006777248, 2.15422719680287, 6.36274321529926;
+        /*A_bar << 0.657210525272494, 0.00821019227910725, 4.39047715460281e-05,
+            -4.25902626859400, 0.977408024157677, 0.00992247836940234,
+            -18.0377924371986, -0.0964587830866237, 0.999667743331513;
+        B_bar << 1.37568842851619e-07,
+            4.97433857418070e-05,
+            0.00999678544531325;
+        C_bar << 0.342789474727553,
+            4.25902626859507,
+            18.0377924372048;*/
         A0 << 1, 0.0100000000000000, 5.00000000000000e-05,
             0, 1, 0.0100000000000000,
             0, 0, 1;
@@ -217,6 +251,14 @@ public:
             5.00000000000000e-05,
             0.0100000000000000;
         px4_state_sub = nh.subscribe("/px4_state_pub", 1, &MyController::StateCallback, this);
+        XmlRpc::XmlRpcValue params;
+        params["order"] = 2;
+        params["cutoff_frequency"] = 20.0; // 输出测量的截止频率
+        filter_for_img_.configure(params, nh);
+        params["cutoff_frequency"] = 10.0; // 输出测量一阶差分的截止频率
+        filter_for_deri_.configure(params, nh);
+        params["cutoff_frequency"] = 5.0; // 输出测量一阶差分的截止频率
+        filter_for_2deri_.configure(params, nh);
     }
 
     void cal_single_axis_ctrl_input(double measure_single_axis, double loss_or_not, bool use_bias, int which_axis)
@@ -224,20 +266,30 @@ public:
         loss_or_not_ = loss_or_not;
         use_bias_ = use_bias;
         which_axis_ = which_axis;
-        y_real = measure_single_axis;
+        measure = measure_single_axis;
+        y_real = measure;
+        y_real = filter_for_img.filter(y_real);
+        // filter_for_img_.update(measure, y_real);
+
         time_now = ros::Time::now().toSec();
         time_pass = time_now - time_last;
         function(loss_or_not_, use_bias_, which_axis_);
+
         y_real_derivative = (y_real - y_real_last) / time_pass; // 0.05 seconds = 50ms
         y_filtered_deri = filter_for_deri.filter(y_real_derivative);
+        // filter_for_deri_.update(y_real_derivative, y_filtered_deri);
+
         if (first_time_cal_2deri)
         {
             y_real_derivative_last = y_real_derivative;
             first_time_cal_2deri = false;
         }
+
         // Compute the second derivative
         y_real_second_derivative = (y_real_derivative - y_real_derivative_last) / time_pass;
         y_filtered_2deri = filter_for_2deri.filter(y_real_second_derivative);
+        // filter_for_2deri_.update(y_real_second_derivative, y_filtered_2deri);
+
         // Update the last values for the next iteration
         y_real_derivative_last = y_real_derivative;
         y_real_last = y_real;
@@ -269,10 +321,6 @@ public:
         }
         if (first_time_in_fun)
         {
-            // cout << first_time_in_fun << endl;
-        }
-        if (first_time_in_fun)
-        {
             first_time_cal_2deri = true;
             time_pass = 0.05;
             y_real_last = y_real;
@@ -282,8 +330,8 @@ public:
             hat_x(0) = y_real;
             aic3controller.computeControl(timer_count, 1, y_real, hat_x(0), y_filtered_deri, hat_x(1), y_filtered_2deri, hat_x(2), mu_last, mu_p_last, mu_pp_last, u_last, u, delta_u, mu, mu_p, mu_pp, use_bias, which_axis);
             // sampleddatacontroller.computeControl(hat_x(0), hat_x(1), hat_x(2), u);
-            u = 0;
-            delta_u = 0;
+            // u = 0;
+            // delta_u = 0;
         }
         else
         {
@@ -293,8 +341,8 @@ public:
                 hat_x = A_bar * hat_x_last + B_bar * delta_u_last + C_bar * predict_y;
                 aic3controller.computeControl(timer_count, 1, y_real, hat_x(0), y_filtered_deri, hat_x(1), y_filtered_2deri, hat_x(2), mu_last, mu_p_last, mu_pp_last, u_last, u, delta_u, mu, mu_p, mu_pp, use_bias, which_axis);
                 // sampleddatacontroller.computeControl(hat_x(0), hat_x(1), hat_x(2), u);
-                u = 0;
-                delta_u = 0;
+                // u = 0;
+                // delta_u = 0;
             }
             else
             {
@@ -303,8 +351,8 @@ public:
                 hat_x = A_bar * hat_x_last + B_bar * delta_u_last + C_bar * predict_y_last;
                 aic3controller.computeControl(timer_count, 1, y_real, hat_x(0), y_filtered_deri, hat_x(1), y_filtered_2deri, hat_x(2), mu_last, mu_p_last, mu_pp_last, u_last, u, delta_u, mu, mu_p, mu_pp, use_bias, which_axis);
                 // sampleddatacontroller.computeControl(hat_x(0), hat_x(1), hat_x(2), u);
-                u = 0;
-                delta_u = 0;
+                // u = 0;
+                // delta_u = 0;
             }
         }
         // Update last values for the next iteration
@@ -314,7 +362,8 @@ public:
         hat_x_last = hat_x;
         predict_y_last = predict_y;
         u_last = u;
-        delta_u_last = delta_u;
+        // delta_u_last = delta_u;
+        delta_u_last = 0;
     }
 
     void StateCallback(const std_msgs::Int32::ConstPtr &msg)
@@ -339,12 +388,13 @@ class TripleAxisController
 {
 private:
     MyController controllerX, controllerY, controllerZ;
-    ros::Subscriber sub;
+    ros::Subscriber sub, ground_truth_sub, ground_truth_second_sub;
     ros::Publisher pub_hat_x, acc_cmd_pub;
     ros::NodeHandle nh;
     quadrotor_msgs::PositionCommand acc_msg;
     ros::Publisher land_pub;
     ros::Timer control_update_timer;
+    double ground_truth_first_deri_x, ground_truth_second_deri_x;
 
 public:
     // 构造函数
@@ -352,6 +402,8 @@ public:
         : nh("~")
     {
         sub = nh.subscribe("/delay_sent_50ms", 1, &TripleAxisController::callback, this);
+        ground_truth_sub = nh.subscribe("/vrpn_client_node/MCServer/5/velocity", 1, &TripleAxisController::ground_truth_callback, this);
+        ground_truth_second_sub = nh.subscribe("/vrpn_client_node/MCServer/5/acceleration", 1, &TripleAxisController::ground_truth_second_callback, this);
         pub_hat_x = nh.advertise<std_msgs::Float64MultiArray>("/hat_x_topic", 100);
         acc_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/acc_cmd", 100);
         land_pub = nh.advertise<quadrotor_msgs::TakeoffLand>("/px4ctrl/takeoff_land", 100);
@@ -363,7 +415,7 @@ public:
         // 更新每个轴的控制器
         // if (abs(msg->data[0]) > 0.2 || abs(msg->data[1]) > 0.2)
         //{
-        controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 0, 0);
+        controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
         controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 0, 1);
         controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 0, 2); // 定高跟踪
         //}
@@ -382,11 +434,30 @@ public:
         }*/
     }
 
+    void ground_truth_callback(const geometry_msgs::TwistStamped::ConstPtr &msg)
+    {
+        ground_truth_first_deri_x = msg->twist.linear.x;
+    }
+
+    void ground_truth_second_callback(const geometry_msgs::AccelStamped::ConstPtr &msg)
+    {
+        ground_truth_second_deri_x = msg->accel.linear.x;
+    }
+
     void controlUpdate(const ros::TimerEvent &)
     {
+        acc_msg.position.x = 0;
+        acc_msg.position.y = 0;
+        acc_msg.position.z = 0;
+        acc_msg.velocity.x = 0;
+        acc_msg.velocity.y = 0;
+        acc_msg.velocity.z = 0;
         acc_msg.acceleration.x = controllerX.u;
         acc_msg.acceleration.y = controllerY.u;
         acc_msg.acceleration.z = controllerZ.u;
+        acc_msg.jerk.x = 0;
+        acc_msg.jerk.y = 0;
+        acc_msg.jerk.z = 0;
         acc_msg.yaw = 0;
         acc_msg.header.frame_id = 'world';
         acc_cmd_pub.publish(acc_msg);
@@ -394,13 +465,15 @@ public:
         msg1.data.resize(8);
         for (int i = 0; i < 3; i++)
         {
-            msg1.data[i] = controllerY.hat_x(i);
+            msg1.data[i] = controllerX.hat_x(i);
         }
-        msg1.data[3] = controllerY.y_real;
-        msg1.data[4] = controllerY.y_real_derivative;
-        msg1.data[5] = controllerY.y_real_second_derivative;
-        msg1.data[6] = controllerY.y_filtered_deri;
-        msg1.data[7] = controllerY.y_filtered_2deri;
+        msg1.data[3] = controllerX.y_real;
+        // msg1.data[4] = controllerX.y_real_derivative;
+        msg1.data[4] = -ground_truth_first_deri_x;
+        msg1.data[5] = -ground_truth_second_deri_x;
+        msg1.data[6] = controllerX.y_filtered_deri;
+        msg1.data[7] = controllerX.y_filtered_2deri;
+        msg1.data[8] = controllerX.measure;
         pub_hat_x.publish(msg1);
     }
 

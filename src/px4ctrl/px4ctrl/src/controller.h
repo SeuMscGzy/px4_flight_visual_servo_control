@@ -41,43 +41,32 @@ struct Controller_Output_t
 	Eigen::Quaterniond q;
 
 	// Body rates in body frame
-	Eigen::Vector3d bodyrates; // [rad/s]
+	Eigen::Vector3d acc_world; // [m/s^2]
 
 	// Collective mass normalized thrust
 	double thrust;
 
-	//Eigen::Vector3d des_v_real;
-};
+	double des_yaw;
 
+	// Eigen::Vector3d des_v_real;
+};
 
 class LinearControl
 {
 public:
-  LinearControl(Parameter_t &);
-  quadrotor_msgs::Px4ctrlDebug calculateControl(const Desired_State_t &des,
-      const Odom_Data_t &odom,
-      const Imu_Data_t &imu, 
-      Controller_Output_t &u,  bool is_cmd_mode_);
-  bool estimateThrustModel(const Eigen::Vector3d &est_v,
-      const Parameter_t &param);
-  void resetThrustMapping(void);
+	LinearControl(Parameter_t &);
+	quadrotor_msgs::Px4ctrlDebug calculateControl(const Desired_State_t &des,
+												  const Odom_Data_t &odom,
+												  const Imu_Data_t &imu,
+												  Controller_Output_t &u, bool is_cmd_mode_);
 
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
 private:
-  Parameter_t param_;
-  quadrotor_msgs::Px4ctrlDebug debug_msg_;
-  std::queue<std::pair<ros::Time, double>> timed_thrust_;
-  static constexpr double kMinNormalizedCollectiveThrust_ = 3.0;
+	Parameter_t param_;
+	quadrotor_msgs::Px4ctrlDebug debug_msg_;
 
-  // Thrust-accel mapping params
-  const double rho2_ = 0.998; // do not change
-  double thr2acc_;
-  double P_;
-
-  double computeDesiredCollectiveThrustSignal(const Eigen::Vector3d &des_acc);
-  double fromQuaternion2yaw(Eigen::Quaterniond q);
+	double fromQuaternion2yaw(Eigen::Quaterniond q);
 };
-
 
 #endif

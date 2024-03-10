@@ -10,6 +10,7 @@ double LinearControl::fromQuaternion2yaw(Eigen::Quaterniond q)
 
 LinearControl::LinearControl(Parameter_t &param) : param_(param)
 {
+  u_last = 0;
   resetThrustMapping();
 }
 
@@ -29,12 +30,14 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   Kv << param_.gain.Kv0, param_.gain.Kv1, param_.gain.Kv2;
   des_acc = des.a + Kv.asDiagonal() * (des.v - odom.v) + Kp.asDiagonal() * (des.p - odom.p); // 这里需要修改
   des_acc += Eigen::Vector3d(0, 0, param_.gra);
-  // cout << des.p << endl;
+  // cout << "desired x:" << des.p[0] << " desired y:" << des.p[1] << " desired z:" << des.p[2] << endl;
   u.thrust = computeDesiredCollectiveThrustSignal(des_acc);
-  if (des.p[2] < -0.2 && odom.p[2] < 0.1 && des_acc[2] < param_.gra && is_cmd_mode_==false) // 在地上或快降落到地上且推杆在底部或中部且为auto_hover模式
+  if (des.p[2] < -0.2 && odom.p[2] < 0.1 && des_acc[2] < param_.gra && is_cmd_mode_ == false) // 在地上或快降落到地上且推杆在底部或中部且为auto_hover模式
   {
-    u.thrust = 0.15;
+    // cout << "进了这里" << endl;
+    u.thrust = u_last * 0.95; // 让无人机缓慢下降
   }
+  u_last = u.thrust;
   double roll, pitch, yaw, yaw_imu;
   double yaw_odom = fromQuaternion2yaw(odom.q);
   double sin = std::sin(yaw_odom);
@@ -42,14 +45,13 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   roll = (des_acc(0) * sin - des_acc(1) * cos) / param_.gra; // 线性化后的情况
   pitch = (des_acc(0) * cos + des_acc(1) * sin) / param_.gra;
   // yaw_imu = fromQuaternion2yaw(imu.q);
-  cout << "pitch:" << pitch << " roll:" << roll << " yaw_odom:" << yaw_odom << " yaw_imu:" << yaw_imu << endl;
+  // cout << "desired pitch:" << pitch << " deisred roll:" << roll << " desired yaw:" << des.yaw << endl;
   //  Eigen::Quaterniond q = Eigen::AngleAxisd(yaw,Eigen::Vector3d::UnitZ())
   //    * Eigen::AngleAxisd(roll,Eigen::Vector3d::UnitX())
   //    * Eigen::AngleAxisd(pitch,Eigen::Vector3d::UnitY());
   Eigen::Quaterniond q = Eigen::AngleAxisd(des.yaw, Eigen::Vector3d::UnitZ()) * Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()) * Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX());
   u.q = imu.q * odom.q.inverse() * q; //??????
-  // double yaw_desired = fromQuaternion2yaw(u.q);
-  // cout << "odom.q.inverse_yaw:" << fromQuaternion2yaw(odom.q.inverse()) << " des_yaw:" << des.yaw << " yaw_desired:" << yaw_desired << endl;
+  cout << fromQuaternion2yaw(u.q) << endl;
   /* WRITE YOUR CODE HERE */
 
   // used for debug
@@ -79,6 +81,7 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   {
     timed_thrust_.pop();
   }
+
   return debug_msg_;
 }
 
@@ -132,7 +135,7 @@ bool LinearControl::estimateThrustModel(
       thr2acc_ = thr2acc_ + K * (est_a(2) - thr * thr2acc_);
       P_ = (1 - K * thr) * P_ / rho2_;
     }
-    // cout << thr2acc_ << endl;
+    // cout << "thr2acc_: " << thr2acc_ << endl;
     return true;
   }
   return false;

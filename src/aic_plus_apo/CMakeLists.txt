@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
   px4ctrl
   quadrotor_msgs
   uav_utils
+  pluginlib
 )
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 find_package(Eigen3 REQUIRED) 

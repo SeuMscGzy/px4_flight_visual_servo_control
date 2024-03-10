@@ -67,7 +67,6 @@ void PX4CtrlFSM::process()
 			}
 
 			state = AUTO_HOVER;
-			controller.resetThrustMapping();
 			set_hov_with_odom(); // 使用里程计当前的信息进行悬停
 			toggle_offboard_mode(true);
 			ROS_INFO("\033[32m[px4ctrl] MANUAL_CTRL(L1) --> AUTO_HOVER(L2)\033[32m");
@@ -114,7 +113,6 @@ void PX4CtrlFSM::process()
 			}
 
 			state = AUTO_TAKEOFF;
-			controller.resetThrustMapping();
 			set_start_pose_for_takeoff_land(odom_data);
 			toggle_offboard_mode(true);				  // toggle on offboard before arm
 			for (int i = 0; i < 10 && ros::ok(); ++i) // wait for 0.1 seconds to allow mode change by FMU // mark
@@ -297,7 +295,7 @@ void PX4CtrlFSM::process()
 		break;
 	}
 
-	if (state == MANUAL_CTRL)
+	if (state == AUTO_HOVER)
 	{
 		if (param.takeoff_land.enable_auto_arm)
 		{
@@ -327,11 +325,11 @@ void PX4CtrlFSM::process()
 	}
 
 	// STEP2: estimate thrust model
-	if (state == AUTO_HOVER || state == CMD_CTRL)
+	/*if (state == AUTO_HOVER || state == CMD_CTRL)
 	{
 		// controller.estimateThrustModel(imu_data.a, bat_data.volt, param);
 		controller.estimateThrustModel(imu_data.a, param);
-	}
+	}*/
 
 	// STEP3: solve and update new control commands
 	if (rotor_low_speed_during_land) // used at the start of auto takeoff
@@ -362,14 +360,8 @@ void PX4CtrlFSM::process()
 	}
 
 	// STEP4: publish control commands to mavros
-	if (param.use_bodyrate_ctrl)
-	{
-		publish_bodyrate_ctrl(u, now_time);
-	}
-	else
-	{
-		publish_attitude_ctrl(u, now_time);
-	}
+
+	publish_acceleration_ctrl(u, now_time);
 
 	// STEP5: Detect if the drone has landed
 	land_detector(state, des, odom_data);
@@ -404,8 +396,7 @@ void PX4CtrlFSM::loss_target_callback(const std_msgs::Float64MultiArray::ConstPt
 void PX4CtrlFSM::motors_idling(const Imu_Data_t &imu, Controller_Output_t &u)
 {
 	u.q = imu.q;
-	u.bodyrates = Eigen::Vector3d::Zero();
-	u.thrust = 0.04;
+	u.acc_world = imu.a;
 }
 
 void PX4CtrlFSM::land_detector(const State_t state, const Desired_State_t &des, const Odom_Data_t &odom)
@@ -425,9 +416,9 @@ void PX4CtrlFSM::land_detector(const State_t state, const Desired_State_t &des, 
 	// cout << takeoff_land.landed << endl;
 
 	// land_detector parameters
-	constexpr double POSITION_DEVIATION_C = -0.5; // Constraint 1: target position below real position for POSITION_DEVIATION_C meters.
-	constexpr double VELOCITY_THR_C = 0.1;		  // Constraint 2: velocity below VELOCITY_MIN_C m/s.
-	constexpr double TIME_KEEP_C = 3.0;			  // Constraint 3: Time(s) the Constraint 1&2 need to keep.
+	constexpr double POSITION_DEVIATION_C = -0.25; // Constraint 1: target position below real position for POSITION_DEVIATION_C meters.
+	constexpr double VELOCITY_THR_C = 0.1;		   // Constraint 2: velocity below VELOCITY_MIN_C m/s.
+	constexpr double TIME_KEEP_C = 1.5;			   // Constraint 3: Time(s) the Constraint 1&2 need to keep.
 
 	static ros::Time time_C12_reached; // time_Constraints12_reached
 	static bool is_last_C12_satisfy;
@@ -539,18 +530,8 @@ void PX4CtrlFSM::set_hov_with_rc() // 得到hov_pose 用遥控器来决定无人
 	hover_pose(2) += rc_data.ch[2] * param.max_manual_vel * delta_t * (param.rc_reverse.throttle ? -1 : 1); // 通道2是油门？
 	hover_pose(3) += rc_data.ch[3] * param.max_manual_vel * delta_t * (param.rc_reverse.yaw ? 1 : -1);		// 通道3是偏航？
 
-	if (hover_pose(2) < -0.3) // 不能再往下面走了，已经在地面上了
-		hover_pose(2) = -0.3;
-	// cout<<(param.rc_reverse.throttle ? 1 : -1)<<endl;
-	//  if (param.print_dbg)
-	//  {
-	//  	static unsigned int count = 0;
-	//  	if (count++ % 100 == 0)
-	//  	{
-	//  		cout << "hover_pose=" << hover_pose.transpose() << endl;
-	//  		cout << "ch[0~3]=" << rc_data.ch[0] << " " << rc_data.ch[1] << " " << rc_data.ch[2] << " " << rc_data.ch[3] << endl;
-	//  	}
-	//  }
+	if (hover_pose(2) < -0.35) // 不能再往下面走了，已经在地面上了
+		hover_pose(2) = -0.35;
 }
 
 void PX4CtrlFSM::set_start_pose_for_takeoff_land(const Odom_Data_t &odom) // 得到takeoff_land_pose 起飞的时候保持姿态不变
@@ -597,41 +578,26 @@ bool PX4CtrlFSM::recv_new_odom()
 	return false;
 }
 
-void PX4CtrlFSM::publish_bodyrate_ctrl(const Controller_Output_t &u, const ros::Time &stamp)
+void PX4CtrlFSM::publish_acceleration_ctrl(const Controller_Output_t &u, const ros::Time &stamp) // 发送姿态和力矩指令
 {
-	mavros_msgs::AttitudeTarget msg;
-
-	msg.header.stamp = stamp;
-	msg.header.frame_id = std::string("FCU");
-
-	msg.type_mask = mavros_msgs::AttitudeTarget::IGNORE_ATTITUDE;
-
-	msg.body_rate.x = u.bodyrates.x();
-	msg.body_rate.y = u.bodyrates.y();
-	msg.body_rate.z = u.bodyrates.z();
-
-	msg.thrust = u.thrust;
-
-	ctrl_FCU_pub.publish(msg);
-}
-
-void PX4CtrlFSM::publish_attitude_ctrl(const Controller_Output_t &u, const ros::Time &stamp) // 发送姿态和力矩指令
-{
-	mavros_msgs::AttitudeTarget msg;
-
-	msg.header.stamp = stamp;
-	msg.header.frame_id = std::string("FCU");
-
-	msg.type_mask = mavros_msgs::AttitudeTarget::IGNORE_ROLL_RATE |
-					mavros_msgs::AttitudeTarget::IGNORE_PITCH_RATE |
-					mavros_msgs::AttitudeTarget::IGNORE_YAW_RATE;
-
-	msg.orientation.x = u.q.x();
-	msg.orientation.y = u.q.y();
-	msg.orientation.z = u.q.z();
-	msg.orientation.w = u.q.w();
-	msg.thrust = u.thrust;
-
+	mavros_msgs::PositionTarget msg;
+	msg.header.stamp = ros::Time::now();
+	msg.coordinate_frame = mavros_msgs::PositionTarget::FRAME_LOCAL_NED;
+	msg.type_mask = mavros_msgs::PositionTarget::IGNORE_VX |
+					mavros_msgs::PositionTarget::IGNORE_VY |
+					mavros_msgs::PositionTarget::IGNORE_VZ |
+					mavros_msgs::PositionTarget::IGNORE_PX |
+					mavros_msgs::PositionTarget::IGNORE_PY |
+					mavros_msgs::PositionTarget::IGNORE_PZ |
+					mavros_msgs::PositionTarget::IGNORE_YAW_RATE;
+	// 设置你想要的加速度值
+	msg.acceleration_or_force.x = u.acc_world[0]; // X轴加速度
+	msg.acceleration_or_force.y = u.acc_world[1]; // Y轴加速度
+	msg.acceleration_or_force.z = u.acc_world[2];
+	; // Z轴加速度
+	cout << u.acc_world[2] << endl;
+	// 设置偏航角（以弧度为单位）
+	msg.yaw = u.des_yaw; // 偏航角，例如，1.57弧度约等于90度
 	ctrl_FCU_pub.publish(msg);
 }
 
