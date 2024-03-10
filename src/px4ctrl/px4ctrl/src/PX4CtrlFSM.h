@@ -46,6 +46,7 @@ public:
 	ros::Publisher traj_start_trigger_pub;
 	ros::Publisher state_pub;
 	ros::Publisher ctrl_FCU_pub;
+	ros::Publisher ctrl_FCU_pub_land;
 	ros::Publisher debug_pub; // debug
 	// ros::Subscriber loss_target_sub;
 	ros::ServiceClient set_FCU_mode_srv;

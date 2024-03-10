@@ -580,25 +580,49 @@ bool PX4CtrlFSM::recv_new_odom()
 
 void PX4CtrlFSM::publish_acceleration_ctrl(const Controller_Output_t &u, const ros::Time &stamp) // 发送姿态和力矩指令
 {
-	mavros_msgs::PositionTarget msg;
-	msg.header.stamp = ros::Time::now();
-	msg.coordinate_frame = mavros_msgs::PositionTarget::FRAME_LOCAL_NED;
-	msg.type_mask = mavros_msgs::PositionTarget::IGNORE_VX |
-					mavros_msgs::PositionTarget::IGNORE_VY |
-					mavros_msgs::PositionTarget::IGNORE_VZ |
-					mavros_msgs::PositionTarget::IGNORE_PX |
-					mavros_msgs::PositionTarget::IGNORE_PY |
-					mavros_msgs::PositionTarget::IGNORE_PZ |
-					mavros_msgs::PositionTarget::IGNORE_YAW_RATE;
-	// 设置你想要的加速度值
-	msg.acceleration_or_force.x = u.acc_world[0]; // X轴加速度
-	msg.acceleration_or_force.y = u.acc_world[1]; // Y轴加速度
-	msg.acceleration_or_force.z = u.acc_world[2];
-	; // Z轴加速度
-	cout << u.acc_world[2] << endl;
-	// 设置偏航角（以弧度为单位）
-	msg.yaw = u.des_yaw; // 偏航角，例如，1.57弧度约等于90度
-	ctrl_FCU_pub.publish(msg);
+	if (get_landed())
+	{
+		mavros_msgs::AttitudeTarget msg;
+		msg.header.stamp = stamp;
+		msg.header.frame_id = std::string("FCU");
+		msg.type_mask = mavros_msgs::AttitudeTarget::IGNORE_ROLL_RATE |
+						mavros_msgs::AttitudeTarget::IGNORE_PITCH_RATE |
+						mavros_msgs::AttitudeTarget::IGNORE_YAW_RATE;
+		msg.orientation.x = imu_data.q.x();
+		msg.orientation.y = imu_data.q.y();
+		msg.orientation.z = imu_data.q.z();
+		msg.orientation.w = imu_data.q.w();
+		// msg.thrust = current_thrust;
+		msg.thrust = 0.02;
+		ctrl_FCU_pub_land.publish(msg);
+		// toggle_arm_disarm(false);
+		if (state_data.current_state.armed)
+		{
+			toggle_arm_disarm(false); // 锁电机
+		}
+	}
+	else
+	{
+		mavros_msgs::PositionTarget msg;
+		msg.header.stamp = ros::Time::now();
+		msg.coordinate_frame = mavros_msgs::PositionTarget::FRAME_LOCAL_NED;
+		msg.type_mask = mavros_msgs::PositionTarget::IGNORE_VX |
+						mavros_msgs::PositionTarget::IGNORE_VY |
+						mavros_msgs::PositionTarget::IGNORE_VZ |
+						mavros_msgs::PositionTarget::IGNORE_PX |
+						mavros_msgs::PositionTarget::IGNORE_PY |
+						mavros_msgs::PositionTarget::IGNORE_PZ |
+						mavros_msgs::PositionTarget::IGNORE_YAW_RATE;
+		// 设置你想要的加速度值
+		msg.acceleration_or_force.x = u.acc_world[0]; // X轴加速度
+		msg.acceleration_or_force.y = u.acc_world[1]; // Y轴加速度
+		msg.acceleration_or_force.z = u.acc_world[2];
+		// Z轴加速度
+		// cout << u.acc_world[2] << endl;
+		// 设置偏航角（以弧度为单位）
+		msg.yaw = u.des_yaw; // 偏航角，例如，1.57弧度约等于90度
+		ctrl_FCU_pub.publish(msg);
+	}
 }
 
 void PX4CtrlFSM::publish_trigger(const nav_msgs::Odometry &odom_msg)

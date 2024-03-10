@@ -34,7 +34,7 @@ private:
     const double k_p = -7.5;
     const double k_d = -2.5; // 逐渐增大
     const double T_c = 0.01;
-    const double x_bias = -2.3;
+    const double x_bias = -1;
     const double y_bias = -0.2;
     const double z_bias = 0.6;
     double y1_APO_fast_bias = 0;
