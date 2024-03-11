@@ -34,7 +34,7 @@ private:
     cv::Mat Position_after = cv::Mat::zeros(3, 1, CV_64F);
     cv::Mat R = cv::Mat::eye(3, 3, CV_64F);
     vpCameraParameters cam_params;
-    double tagSize = 0.1228; // AprilTag的尺寸（单位：米）
+    double tagSize = 0.0885; // AprilTag的尺寸（单位：米）
     double alpha;
     vpDetectorAprilTag detector{vpDetectorAprilTag::TAG_36h11};
     std::vector<vpHomogeneousMatrix> cMo;
@@ -48,7 +48,7 @@ public:
         odom_sub_ = nh_.subscribe("/vins_fusion/imu_propagate", 1, &AprilTagDetector::odomCallback, this);
         point_pub_ = nh_.advertise<std_msgs::Float64MultiArray>("/point_with_unfixed_delay", 10);
         // 直接使用给定的内参数值初始化相机参数
-        alpha = 0.9; // 缩放比例
+        alpha = 1; // 缩放比例
 
         // 假设原始相机内参是这样的
         double fx = 625.5179846719374, fy = 619.7330458544326, cx = 637.3374051805021, cy = 363.5448204145972;
@@ -156,8 +156,8 @@ public:
                 Position_before.at<double>(2, 0) = t[2] + 0.07578245909207494; // 将其转换到imu飞控所在位置
                 // cout << "Position: (" << Position_before.at<double>(0, 0) << ", " << Position_before.at<double>(1, 0) << ", " << Position_before.at<double>(2, 0) << ")" << endl;
                 Position_after = R * Position_before;
-                cout << R << endl;
-                cout << "Position: (" << Position_after.at<double>(0, 0) << ", " << Position_after.at<double>(1, 0) << ", " << Position_after.at<double>(2, 0) << ")" << endl;
+                //cout << R << endl;
+                //cout << "Position: (" << Position_after.at<double>(0, 0) << ", " << Position_after.at<double>(1, 0) << ", " << Position_after.at<double>(2, 0) << ")" << endl;
                 publishDetectionResult(false); // 提取的函数，用于发布检测结果
             }
             else

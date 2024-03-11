@@ -1,7 +1,7 @@
 #include <ros/ros.h>
 #include <std_msgs/Float64MultiArray.h>
 #include <fstream>
-
+using namespace std;
 class DataRecorder
 {
 public:
@@ -25,6 +25,7 @@ public:
 
     void callback(const std_msgs::Float64MultiArray::ConstPtr &msg)
     {
+        cout << msg->data.size() << endl;
         if (msg->data.size() >= 9)
         {
             file_ << msg->data[0] << "," << msg->data[1] << "," << msg->data[2] << ","

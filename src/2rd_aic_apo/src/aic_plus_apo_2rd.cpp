@@ -17,7 +17,7 @@
 
 using namespace std;
 
-class AIC3Controller
+class AIC2Controller
 {
 private:
     const double e_1 = 4.0;
@@ -144,7 +144,7 @@ private:
     LowPassFilter filter_for_img, filter_for_deri; // 一阶LPF
     filters::FilterChain<double> filter_for_img_;  // 二阶LPF
     filters::FilterChain<double> filter_for_deri_; // 二阶LPF
-    AIC3Controller aic3controller;
+    AIC2Controller aic2controller;
     // SampledDataController sampleddatacontroller;
     ros::Subscriber px4_state_sub;
     friend class TripleAxisController;
@@ -261,7 +261,7 @@ public:
             first_time_in_fun = false;
             predict_y = y_real;
             hat_x(0) = y_real;
-            aic3controller.computeControl(timer_count, 1, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, delta_u, mu, mu_p, use_bias, which_axis);
+            aic2controller.computeControl(timer_count, 1, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, delta_u, mu, mu_p, use_bias, which_axis);
             // u = 0;
             // delta_u = 0;
         }
@@ -271,7 +271,7 @@ public:
             {
                 predict_y = y_real;
                 hat_x = A_bar * hat_x_last + B_bar * delta_u_last + C_bar * predict_y;
-                aic3controller.computeControl(timer_count, 1, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, delta_u, mu, mu_p, use_bias, which_axis); // u = 0;
+                aic2controller.computeControl(timer_count, 1, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, delta_u, mu, mu_p, use_bias, which_axis); // u = 0;
                 // delta_u = 0;
             }
             else
@@ -279,7 +279,7 @@ public:
                 Eigen::Vector2d coeff(1, 0);
                 predict_y = coeff.transpose() * (A0 * hat_x_last + B0 * delta_u_last);
                 hat_x = A_bar * hat_x_last + B_bar * delta_u_last + C_bar * predict_y_last;
-                aic3controller.computeControl(timer_count, 1, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, delta_u, mu, mu_p, use_bias, which_axis);
+                aic2controller.computeControl(timer_count, 1, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, delta_u, mu, mu_p, use_bias, which_axis);
                 // u = 0;
                 // delta_u = 0;
             }

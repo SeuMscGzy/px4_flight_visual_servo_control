@@ -13,7 +13,6 @@
 #include <geometry_msgs/TwistStamped.h>
 #include <geometry_msgs/AccelStamped.h>
 #include <nav_msgs/Odometry.h>
-#include <filters/filter_chain.h>
 
 using namespace std;
 
@@ -146,6 +145,48 @@ public:
     }
 };
 
+class ButterworthLowPassFilter
+{
+private:
+    double fs; // 采样频率
+    double fc; // 截止频率
+    double a0, a1, a2, b1, b2;
+    double prevX1, prevX2, prevY1, prevY2;
+
+public:
+    ButterworthLowPassFilter(double sampleRate, double cutoffFrequency)
+        : fs(sampleRate), fc(cutoffFrequency), prevX1(0), prevX2(0), prevY1(0), prevY2(0)
+    {
+        calculateCoefficients();
+    }
+
+    void calculateCoefficients()
+    {
+        double ita = 1.0 / tan(M_PI * fc / fs);
+        double q = sqrt(2.0);
+        a0 = 1.0 / (1.0 + q * ita + ita * ita);
+        a1 = 2 * a0;
+        a2 = a0;
+        b1 = 2.0 * a0 * (1 - ita * ita);
+        b2 = a0 * (1 - q * ita + ita * ita);
+    }
+
+    double filter(double input)
+    {
+        double output = a0 * input + a1 * prevX1 + a2 * prevX2 - b1 * prevY1 - b2 * prevY2;
+        prevX2 = prevX1;
+        prevX1 = input;
+        prevY2 = prevY1;
+        prevY1 = output;
+        return output;
+    }
+
+    void reset()
+    {
+        prevX1 = prevX2 = prevY1 = prevY2 = 0;
+    }
+};
+
 class MyController
 {
 private:
@@ -162,12 +203,9 @@ private:
     int timer_count;
     ros::NodeHandle nh;
     double time_now, time_last, time_pass;
-    LowPassFilter filter_for_img, filter_for_deri, filter_for_2deri; // 一阶LPF
-    filters::FilterChain<double> filter_for_img_;                    // 二阶LPF
-    filters::FilterChain<double> filter_for_deri_;                   // 二阶LPF
-    filters::FilterChain<double> filter_for_2deri_;                  // 二阶LPF
+    // LowPassFilter filter_for_img, filter_for_deri, filter_for_2deri; // 一阶LPF
+    ButterworthLowPassFilter filter_for_img, filter_for_deri, filter_for_2deri; // 一阶LPF
     AIC3Controller aic3controller;
-    // SampledDataController sampleddatacontroller;
     ros::Subscriber px4_state_sub;
     friend class TripleAxisController;
     bool loss_target;
@@ -204,12 +242,12 @@ public:
           mu_p_last(0.0),
           mu_pp_last(0.0),
           timer_count(0),
-          filter_for_img(0.98),  // 0.8 is well
-          filter_for_deri(0.35), // 0.41 is well
-          filter_for_2deri(0.12),
-          filter_for_img_("double"),
-          filter_for_deri_("double"),
-          filter_for_2deri_("double"),
+          // filter_for_img(0.84),  // 0.8 is well
+          // filter_for_deri(0.35), // 0.41 is well
+          // filter_for_2deri(0.12),
+          filter_for_img(20, 9),  
+          filter_for_deri(20, 3.5), 
+          filter_for_2deri(20, 1.5),
           y_filtered_deri(0),
           y_filtered_2deri(0),
           loss_target(true),
@@ -228,22 +266,24 @@ public:
         C_bar << 0.376740625035147,
             5.19241525496506,
             24.4593676568210;*/
-        A_bar << 0.753124993222755, 0.00872804281934023, 4.56965592635614e-05,
-            -2.15422719680281, 0.988782149344942, 0.00996184991945639,
-            -6.36274321529903, -0.0333127917031363, 0.999886413245987;
+        /*A_bar << 0.704170422049836, 0.00846563257855219, 4.47917067648264e-05,
+            -3.13264238771843, 0.983536297142058, 0.00994375890179147,
+            -11.2677569620530, -0.0596177617039839, 0.999795686697690;
         B_bar << 1.37568842851619e-07,
             4.97433857418070e-05,
             0.00999678544531325;
-        C_bar << 0.246875006777248, 2.15422719680287, 6.36274321529926;
-        /*A_bar << 0.657210525272494, 0.00821019227910725, 4.39047715460281e-05,
-            -4.25902626859400, 0.977408024157677, 0.00992247836940234,
-            -18.0377924371986, -0.0964587830866237, 0.999667743331513;
+        C_bar << 0.295829577950179,
+            3.13264238771871,
+            11.2677569620544;*/
+        A_bar << 0.634457640194048, 0.00808503158920889, 4.34679117699403e-05,
+            -4.87327452435155, 0.974028966940822, 0.00991068388354639,
+            -22.1853266807892, -0.119275949896716, 0.999588099061547;
         B_bar << 1.37568842851619e-07,
             4.97433857418070e-05,
             0.00999678544531325;
-        C_bar << 0.342789474727553,
-            4.25902626859507,
-            18.0377924372048;*/
+        C_bar << 0.365542359806030,
+            4.87327452435347,
+            22.1853266808012;
         A0 << 1, 0.0100000000000000, 5.00000000000000e-05,
             0, 1, 0.0100000000000000,
             0, 0, 1;
@@ -251,14 +291,14 @@ public:
             5.00000000000000e-05,
             0.0100000000000000;
         px4_state_sub = nh.subscribe("/px4_state_pub", 1, &MyController::StateCallback, this);
-        XmlRpc::XmlRpcValue params;
+        /*XmlRpc::XmlRpcValue params;
         params["order"] = 2;
         params["cutoff_frequency"] = 20.0; // 输出测量的截止频率
         filter_for_img_.configure(params, nh);
         params["cutoff_frequency"] = 10.0; // 输出测量一阶差分的截止频率
         filter_for_deri_.configure(params, nh);
         params["cutoff_frequency"] = 5.0; // 输出测量一阶差分的截止频率
-        filter_for_2deri_.configure(params, nh);
+        filter_for_2deri_.configure(params, nh);*/
     }
 
     void cal_single_axis_ctrl_input(double measure_single_axis, double loss_or_not, bool use_bias, int which_axis)
@@ -394,7 +434,7 @@ private:
     quadrotor_msgs::PositionCommand acc_msg;
     ros::Publisher land_pub;
     ros::Timer control_update_timer;
-    double ground_truth_first_deri_x, ground_truth_second_deri_x;
+    double ground_truth_first_deri_x = 0, ground_truth_second_deri_x = 0;
 
 public:
     // 构造函数
@@ -462,7 +502,7 @@ public:
         acc_msg.header.frame_id = 'world';
         acc_cmd_pub.publish(acc_msg);
         std_msgs::Float64MultiArray msg1;
-        msg1.data.resize(8);
+        msg1.data.resize(9);
         for (int i = 0; i < 3; i++)
         {
             msg1.data[i] = controllerX.hat_x(i);
@@ -474,6 +514,7 @@ public:
         msg1.data[6] = controllerX.y_filtered_deri;
         msg1.data[7] = controllerX.y_filtered_2deri;
         msg1.data[8] = controllerX.measure;
+        cout << "消息已经发送" << endl;
         pub_hat_x.publish(msg1);
     }
 
