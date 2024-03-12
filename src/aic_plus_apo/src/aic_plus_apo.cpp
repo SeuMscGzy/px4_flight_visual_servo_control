@@ -204,7 +204,7 @@ private:
     ros::NodeHandle nh;
     double time_now, time_last, time_pass;
     // LowPassFilter filter_for_img, filter_for_deri, filter_for_2deri; // 一阶LPF
-    ButterworthLowPassFilter filter_for_img, filter_for_deri, filter_for_2deri; // 一阶LPF
+    ButterworthLowPassFilter filter_for_img, filter_for_deri, filter_for_2deri; // 二阶巴特沃斯LPF
     AIC3Controller aic3controller;
     ros::Subscriber px4_state_sub;
     friend class TripleAxisController;
@@ -245,8 +245,8 @@ public:
           // filter_for_img(0.84),  // 0.8 is well
           // filter_for_deri(0.35), // 0.41 is well
           // filter_for_2deri(0.12),
-          filter_for_img(20, 9),  
-          filter_for_deri(20, 3.5), 
+          filter_for_img(20, 9),
+          filter_for_deri(20, 3.5),
           filter_for_2deri(20, 1.5),
           y_filtered_deri(0),
           y_filtered_2deri(0),
