@@ -1,12 +1,5 @@
 #include <ros/ros.h>
-#include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
-#include <sensor_msgs/image_encodings.h>
-#include <visp3/core/vpImage.h>
-#include <visp3/gui/vpDisplayX.h>
-#include <visp3/detection/vpDetectorAprilTag.h>
-#include <visp3/core/vpHomogeneousMatrix.h>
-#include <visp3/core/vpImageConvert.h>
 #include <geometry_msgs/PoseArray.h>
 #include <std_msgs/Float64MultiArray.h>
 #include <vector>
@@ -15,6 +8,7 @@
 #include <tf/transform_datatypes.h>
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
+#include <std_msgs/Float64MultiArray.h>
 using namespace std;
 double data1[] = {0.011763502382341945f, -0.03427874295798661f, 0.999343078123285f,
                   -0.999463220176014f, 0.030157061398510737f, 0.01279934229561297f,
@@ -23,52 +17,26 @@ class AprilTagDetector
 {
 private:
     ros::NodeHandle nh_;
-    image_transport::ImageTransport it_;
-    image_transport::Subscriber image_sub_;
-    vpDisplayX *d = NULL;
-    vpImage<unsigned char> I;
+    ros::Subscriber image_sub_;
     std_msgs::Float64MultiArray point_;
     ros::Subscriber odom_sub_;
     ros::Publisher point_pub_;
     cv::Mat Position_before = cv::Mat::zeros(3, 1, CV_64F);
     cv::Mat Position_after = cv::Mat::zeros(3, 1, CV_64F);
     cv::Mat R = cv::Mat::eye(3, 3, CV_64F);
-    vpCameraParameters cam_params;
-    double tagSize = 0.079; // AprilTag的尺寸（单位：米）
-    double alpha;
-    vpDetectorAprilTag detector{vpDetectorAprilTag::TAG_36h11};
-    std::vector<vpHomogeneousMatrix> cMo;
 
 public:
-    AprilTagDetector() : it_(nh_)
+    AprilTagDetector()
     {
         cv::Mat tempMat(3, 3, CV_64F, data1);
         R = tempMat;
-        image_sub_ = it_.subscribe("/flipped_image", 1, &AprilTagDetector::imageCb, this);
+        image_sub_ = nh_.subscribe("/object_pose", 1, &AprilTagDetector::imageCb, this);
         odom_sub_ = nh_.subscribe("/vins_fusion/imu_propagate", 1, &AprilTagDetector::odomCallback, this);
         point_pub_ = nh_.advertise<std_msgs::Float64MultiArray>("/point_with_unfixed_delay", 10);
-        // 直接使用给定的内参数值初始化相机参数
-        alpha = 0.8; // 缩放比例
-
-        // 假设原始相机内参是这样的
-        double fx = 625.5179846719374, fy = 619.7330458544326, cx = 637.3374051805021, cy = 363.5448204145972;
-
-        // 调整内参以匹配新的图像尺寸
-        double fx_new = fx * alpha;
-        double fy_new = fy * alpha;
-        double cx_new = cx * alpha;
-        double cy_new = cy * alpha;
-
-        // 使用新的内参初始化相机参数
-        cam_params.initPersProjWithoutDistortion(fx_new, fy_new, cx_new, cy_new);
     }
 
     ~AprilTagDetector()
     {
-        if (d)
-        {
-            delete d;
-        }
     }
 
     void publishDetectionResult(bool lost)
@@ -104,72 +72,24 @@ public:
         }
     }
 
-    void imageCb(const sensor_msgs::ImageConstPtr &msg)
+    void imageCb(const std_msgs::Float64MultiArray::ConstPtr &msg)
     {
-        cv_bridge::CvImagePtr cv_ptr;
-        try
+        std_msgs::Float64MultiArray temp_array;
+        temp_array.data = msg->data;
+        if (temp_array.data[3] == 1)
         {
-            // ros::Time start_time = ros::Time::now(); // 开始时间
-            cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::MONO8);
-
-            // 调整图像大小
-            cv::Mat resized_image;
-            cv::resize(cv_ptr->image, resized_image, cv::Size(), alpha, alpha); // 将图像缩小为原来的50%
-
-            // 将cv::Mat转换为vpImage
-            vpImage<unsigned char> I;
-            vpImageConvert::convert(resized_image, I);
-
-            // ros::Time end_time = ros::Time::now(); // 结束时间
-
-            // 计算运行时间（以秒为单位）
-            // ros::Duration duration = end_time - start_time;
-            /*if (d == NULL)
-            {
-                d = new vpDisplayX(I);
-                vpDisplay::setTitle(I, "AprilTag detection");
-            }*/
-            // vpDisplay::display(I);
-            // 调用detect方法，额外传入相机参数和标签尺寸
-            // ros::Time start_time = ros::Time::now(); // 开始时间
-
-            cMo.clear();
-            // 调用检测函数
-            detector.detect(I, tagSize, cam_params, cMo);
-
-            // ros::Time end_time = ros::Time::now(); // 结束时间
-
-            // 计算运行时间（以秒为单位）
-            // ros::Duration duration = end_time - start_time;
-
-            // ROS_INFO("Detection took %f seconds.", duration.toSec());
-
-            if (!cMo.empty())
-            {
-                // 直接打印检测到的单个AprilTag的相机坐标
-                // std::cout << "AprilTag pose (camera frame):" << std::endl;
-                // cMo[0].print();
-                vpTranslationVector t;
-                cMo[0].extract(t);
-                Position_before.at<double>(0, 0) = t[0] + 0.002749479296725727;
-                Position_before.at<double>(1, 0) = t[1] - 0.05780676994925782;
-                Position_before.at<double>(2, 0) = t[2] + 0.07578245909207494; // 将其转换到imu飞控所在位置
-                // cout << "Position: (" << Position_before.at<double>(0, 0) << ", " << Position_before.at<double>(1, 0) << ", " << Position_before.at<double>(2, 0) << ")" << endl;
-                Position_after = R * Position_before;
-                // cout << R << endl;
-                // cout << "Position: (" << Position_after.at<double>(0, 0) << ", " << Position_after.at<double>(1, 0) << ", " << Position_after.at<double>(2, 0) << ")" << endl;
-                publishDetectionResult(false); // 提取的函数，用于发布检测结果
-            }
-            else
-            {
-                publishDetectionResult(true); // 提取的函数，用于发布检测结果
-            }
-            // vpDisplay::flush(I);
+            Position_before.at<double>(0, 0) = temp_array.data[0] + 0.002749479296725727;
+            Position_before.at<double>(1, 0) = temp_array.data[1] - 0.05780676994925782;
+            Position_before.at<double>(2, 0) = temp_array.data[2] + 0.07578245909207494; // 将其转换到imu飞控所在位置
+            // cout << "Position: (" << Position_before.at<double>(0, 0) << ", " << Position_before.at<double>(1, 0) << ", " << Position_before.at<double>(2, 0) << ")" << endl;
+            Position_after = R * Position_before;
+            // cout << R << endl;
+            cout << "Position: (" << Position_after.at<double>(0, 0) << ", " << Position_after.at<double>(1, 0) << ", " << Position_after.at<double>(2, 0) << ")" << endl;
+            publishDetectionResult(false); // 提取的函数，用于发布检测结果
         }
-        catch (cv_bridge::Exception &e)
+        else
         {
-            ROS_ERROR("cv_bridge exception: %s", e.what());
-            return;
+            publishDetectionResult(true); // 提取的函数，用于发布检测结果
         }
     }
 };
