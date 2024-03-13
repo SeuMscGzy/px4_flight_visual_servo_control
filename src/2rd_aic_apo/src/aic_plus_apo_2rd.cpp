@@ -125,6 +125,48 @@ public:
     }
 };
 
+class ButterworthLowPassFilter
+{
+private:
+    double fs; // 采样频率
+    double fc; // 截止频率
+    double a0, a1, a2, b1, b2;
+    double prevX1, prevX2, prevY1, prevY2;
+
+public:
+    ButterworthLowPassFilter(double sampleRate, double cutoffFrequency)
+        : fs(sampleRate), fc(cutoffFrequency), prevX1(0), prevX2(0), prevY1(0), prevY2(0)
+    {
+        calculateCoefficients();
+    }
+
+    void calculateCoefficients()
+    {
+        double ita = 1.0 / tan(M_PI * fc / fs);
+        double q = sqrt(2.0);
+        a0 = 1.0 / (1.0 + q * ita + ita * ita);
+        a1 = 2 * a0;
+        a2 = a0;
+        b1 = 2.0 * a0 * (1 - ita * ita);
+        b2 = a0 * (1 - q * ita + ita * ita);
+    }
+
+    double filter(double input)
+    {
+        double output = a0 * input + a1 * prevX1 + a2 * prevX2 - b1 * prevY1 - b2 * prevY2;
+        prevX2 = prevX1;
+        prevX1 = input;
+        prevY2 = prevY1;
+        prevY1 = output;
+        return output;
+    }
+
+    void reset()
+    {
+        prevX1 = prevX2 = prevY1 = prevY2 = 0;
+    }
+};
+
 class MyController
 {
 private:
@@ -141,9 +183,7 @@ private:
     int timer_count;
     ros::NodeHandle nh;
     double time_now, time_last, time_pass;
-    LowPassFilter filter_for_img, filter_for_deri; // 一阶LPF
-    filters::FilterChain<double> filter_for_img_;  // 二阶LPF
-    filters::FilterChain<double> filter_for_deri_; // 二阶LPF
+    ButterworthLowPassFilter filter_for_img, filter_for_deri; // 二阶巴特沃斯LPF
     AIC2Controller aic2controller;
     // SampledDataController sampleddatacontroller;
     ros::Subscriber px4_state_sub;
@@ -178,10 +218,8 @@ public:
           mu_last(0.0),
           mu_p_last(0.0),
           timer_count(0),
-          filter_for_img(0.98),  // 0.8 is well
-          filter_for_deri(0.35), // 0.41 is well
-          filter_for_img_("double"),
-          filter_for_deri_("double"),
+          filter_for_img(20, 9.9),
+          filter_for_deri(20, 3.0),
           y_filtered_deri(0),
           loss_target(true),
           loss_or_not_(1),
@@ -189,23 +227,17 @@ public:
           which_axis_(0),
           first_time_in_fun(true)
     {
-        A_bar << 0.402192027621384, 0.00670320046035639,
-            -10.7251207365702, 0.938448064449895;
+        A_bar << 0.518572754477203, 0.00740818220681718,
+            -6.66736398613546, 0.963063686886233;
         B_bar << 3.84699597078219e-05,
             0.00978079723749769;
-        C_bar << 0.597807972402270,
-            10.7251207373951;
+        C_bar << 0.481427245526137,
+            6.66736398622287;
         A0 << 1, 0.0100000000000000,
             0, 1;
         B0 << 5.00000000000000e-05,
             0.0100000000000000;
         px4_state_sub = nh.subscribe("/px4_state_pub", 1, &MyController::StateCallback, this);
-        XmlRpc::XmlRpcValue params;
-        params["order"] = 2;
-        params["cutoff_frequency"] = 20.0; // 输出测量的截止频率
-        filter_for_img_.configure(params, nh);
-        params["cutoff_frequency"] = 10.0; // 输出测量一阶差分的截止频率
-        filter_for_deri_.configure(params, nh);
     }
 
     void cal_single_axis_ctrl_input(double measure_single_axis, double loss_or_not, bool use_bias, int which_axis)
@@ -215,8 +247,8 @@ public:
         which_axis_ = which_axis;
         measure = measure_single_axis;
         y_real = measure;
-        y_real = filter_for_img.filter(y_real);
-        // filter_for_img_.update(measure, y_real);
+        // y_real = filter_for_img.filter(y_real);
+        //  filter_for_img_.update(measure, y_real);
 
         time_now = ros::Time::now().toSec();
         time_pass = time_now - time_last;
@@ -224,7 +256,6 @@ public:
 
         y_real_derivative = (y_real - y_real_last) / time_pass; // 0.05 seconds = 50ms
         y_filtered_deri = filter_for_deri.filter(y_real_derivative);
-        // filter_for_deri_.update(y_real_derivative, y_filtered_deri);
 
         // Update the last values for the next iteration
         y_real_last = y_real;
@@ -320,7 +351,7 @@ private:
     quadrotor_msgs::PositionCommand acc_msg;
     ros::Publisher land_pub;
     ros::Timer control_update_timer;
-    double ground_truth_first_deri_x, ground_truth_second_deri_x;
+    double ground_truth_first_deri_x;
 
 public:
     // 构造函数
@@ -329,7 +360,6 @@ public:
     {
         sub = nh.subscribe("/delay_sent_50ms", 1, &TripleAxisController::callback, this);
         ground_truth_sub = nh.subscribe("/vrpn_client_node/MCServer/5/velocity", 1, &TripleAxisController::ground_truth_callback, this);
-        ground_truth_second_sub = nh.subscribe("/vrpn_client_node/MCServer/5/acceleration", 1, &TripleAxisController::ground_truth_second_callback, this);
         pub_hat_x = nh.advertise<std_msgs::Float64MultiArray>("/hat_x_topic", 100);
         acc_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/acc_cmd", 100);
         land_pub = nh.advertise<quadrotor_msgs::TakeoffLand>("/px4ctrl/takeoff_land", 100);
@@ -347,11 +377,6 @@ public:
     void ground_truth_callback(const geometry_msgs::TwistStamped::ConstPtr &msg)
     {
         ground_truth_first_deri_x = msg->twist.linear.x;
-    }
-
-    void ground_truth_second_callback(const geometry_msgs::AccelStamped::ConstPtr &msg)
-    {
-        ground_truth_second_deri_x = msg->accel.linear.x;
     }
 
     void controlUpdate(const ros::TimerEvent &)
@@ -372,16 +397,19 @@ public:
         acc_msg.header.frame_id = 'world';
         acc_cmd_pub.publish(acc_msg);
         std_msgs::Float64MultiArray msg1;
-        msg1.data.resize(6);
+        msg1.data.resize(9);
         for (int i = 0; i < 2; i++)
         {
             msg1.data[i] = controllerX.hat_x(i);
         }
-        msg1.data[2] = controllerX.y_real;
+        msg1.data[2] = 0;
+        msg1.data[3] = controllerX.y_real;
         // msg1.data[4] = controllerX.y_real_derivative;
-        msg1.data[3] = -ground_truth_first_deri_x;
-        msg1.data[4] = controllerX.y_filtered_deri;
-        msg1.data[5] = controllerX.measure;
+        msg1.data[4] = -ground_truth_first_deri_x;
+        msg1.data[5] = 0;
+        msg1.data[6] = controllerX.y_filtered_deri;
+        msg1.data[7] = 0;
+        msg1.data[8] = controllerX.measure;
         pub_hat_x.publish(msg1);
     }
 

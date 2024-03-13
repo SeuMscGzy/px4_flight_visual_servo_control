@@ -27,7 +27,7 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   Eigen::Vector3d Kp, Kv;
   Kp << param_.gain.Kp0, param_.gain.Kp1, param_.gain.Kp2;
   Kv << param_.gain.Kv0, param_.gain.Kv1, param_.gain.Kv2;
-  des_acc = des.a + Kp.asDiagonal() * (des.p - odom.p); //hover模式用速度命令，cmd模式用加速度命令
+  des_acc = des.a + Kp.asDiagonal() * (des.p - odom.p) + Kv.asDiagonal() * (des.v - odom.v); //hover模式用速度命令，cmd模式用加速度命令
   cout << des.p << endl;
   u.acc_world = des_acc;
   u.q = imu.q * odom.q.inverse();

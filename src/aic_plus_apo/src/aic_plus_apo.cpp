@@ -33,7 +33,7 @@ private:
     const double k_p = -3;
     const double k_d = -2.5; // 逐渐增大
     const double T_c = 0.01;
-    const double x_bias = -0.7;
+    const double x_bias = -1;
     const double y_bias = -0.2;
     const double z_bias = 0.3;
     double y1_APO_fast_bias = 0;
@@ -106,9 +106,9 @@ public:
             delta_u = T_c * (k_i * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu)) + k_p * ((1 - trust_param_y2) * (y2_APO_fast - mu_p) + trust_param_y2 * (y2_derivative_sampling - mu_p)) + k_d * ((1 - trust_param_y3) * (y3_APO_fast - mu_pp) + trust_param_y3 * (y3_real_slow - mu_pp)));
             u = double(u_last - delta_u);
         }
-        if (abs(u) >= 0.3) // 控制量限幅
+        if (abs(u) >= 0.1) // 控制量限幅
         {
-            u = 0.3 * u / abs(u);
+            u = 0.1 * u / abs(u);
         }
     }
 };
@@ -245,9 +245,9 @@ public:
           // filter_for_img(0.84),  // 0.8 is well
           // filter_for_deri(0.35), // 0.41 is well
           // filter_for_2deri(0.12),
-          filter_for_img(20, 9.8),
-          filter_for_deri(20, 2.5),
-          filter_for_2deri(20, 0.9),
+          filter_for_img(20, 9.9),
+          filter_for_deri(20, 2.0),
+          filter_for_2deri(20, 0.8),
           y_filtered_deri(0),
           y_filtered_2deri(0),
           loss_target(true),
@@ -257,7 +257,7 @@ public:
           first_time_in_fun(true),
           first_time_cal_2deri(false)
     {
-        A_bar << 0.641233388759048, 0.00812240265642060, 4.35985113066055e-05,
+        /*A_bar << 0.641233388759048, 0.00812240265642060, 4.35985113066055e-05,
             -4.68558842659452, 0.975064137937935, 0.00991430147112208,
             -20.8855644377951, -0.112107162843774, 0.999613151699345;
         B_bar << 1.37568842851619e-07,
@@ -265,16 +265,16 @@ public:
             0.00999678544531325;
         C_bar << 0.358766611241019,
             4.68558842659614,
-            20.8855644378049;
-        /*A_bar << 0.704170422049836, 0.00846563257855219, 4.47917067648264e-05,
-            -3.13264238771843, 0.983536297142058, 0.00994375890179147,
-            -11.2677569620530, -0.0596177617039839, 0.999795686697690;
+            20.8855644378049;*/
+        A_bar << 0.657210525272494, 0.00821019227910725, 4.39047715460281e-05,
+            -4.25902626859400, 0.977408024157677, 0.00992247836940234,
+            -18.0377924371986, -0.0964587830866237, 0.999667743331513;
         B_bar << 1.37568842851619e-07,
             4.97433857418070e-05,
             0.00999678544531325;
-        C_bar << 0.295829577950179,
-            3.13264238771871,
-            11.2677569620544;*/
+        C_bar << 0.342789474727553,
+            4.25902626859507,
+            18.0377924372048;
         /* A_bar << 0.634457640194048, 0.00808503158920889, 4.34679117699403e-05,
              -4.87327452435155, 0.974028966940822, 0.00991068388354639,
              -22.1853266807892, -0.119275949896716, 0.999588099061547;
@@ -291,14 +291,6 @@ public:
             5.00000000000000e-05,
             0.0100000000000000;
         px4_state_sub = nh.subscribe("/px4_state_pub", 1, &MyController::StateCallback, this);
-        /*XmlRpc::XmlRpcValue params;
-        params["order"] = 2;
-        params["cutoff_frequency"] = 20.0; // 输出测量的截止频率
-        filter_for_img_.configure(params, nh);
-        params["cutoff_frequency"] = 10.0; // 输出测量一阶差分的截止频率
-        filter_for_deri_.configure(params, nh);
-        params["cutoff_frequency"] = 5.0; // 输出测量一阶差分的截止频率
-        filter_for_2deri_.configure(params, nh);*/
     }
 
     void cal_single_axis_ctrl_input(double measure_single_axis, double loss_or_not, bool use_bias, int which_axis)
@@ -309,7 +301,6 @@ public:
         measure = measure_single_axis;
         y_real = measure;
         y_real = filter_for_img.filter(y_real);
-        // filter_for_img_.update(measure, y_real);
 
         time_now = ros::Time::now().toSec();
         time_pass = time_now - time_last;
@@ -317,7 +308,6 @@ public:
 
         y_real_derivative = (y_real - y_real_last) / time_pass; // 0.05 seconds = 50ms
         y_filtered_deri = filter_for_deri.filter(y_real_derivative);
-        // filter_for_deri_.update(y_real_derivative, y_filtered_deri);
 
         if (first_time_cal_2deri)
         {
@@ -328,7 +318,6 @@ public:
         // Compute the second derivative
         y_real_second_derivative = (y_real_derivative - y_real_derivative_last) / time_pass;
         y_filtered_2deri = filter_for_2deri.filter(y_real_second_derivative);
-        // filter_for_2deri_.update(y_real_second_derivative, y_filtered_2deri);
 
         // Update the last values for the next iteration
         y_real_derivative_last = y_real_derivative;
@@ -457,7 +446,7 @@ public:
         //{
         controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
         controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 0, 1);
-        controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2); // 定高跟踪
+        controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 0, 2); // 定高跟踪
         //}
         /*else if (abs(msg->data[0]) != 0 && abs(msg->data[1]) != 0) // 跟踪误差很小 可以开始边下降边跟踪
         {
