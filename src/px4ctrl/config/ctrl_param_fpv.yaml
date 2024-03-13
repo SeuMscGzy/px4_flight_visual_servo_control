@@ -36,9 +36,9 @@ thrust_model: # The model that maps thrust signal u(0~1) to real thrust force F(
 
 gain: 
     # Cascade PID controller. Recommend to read the code.
-    Kp0: 2
-    Kp1: 2
-    Kp2: 2
+    Kp0: 1
+    Kp1: 1
+    Kp2: 1
     Kv0: 1.5
     Kv1: 1.5
     Kv2: 1.5

@@ -29,13 +29,13 @@ private:
     const double sigma_w1_inv = 1.0;
     const double sigma_w2_inv = 1.0;
     const double sigma_w3_inv = 1.0;
-    const double k_i = -6;
-    const double k_p = -7.5;
+    const double k_i = -1;
+    const double k_p = -3;
     const double k_d = -2.5; // 逐渐增大
     const double T_c = 0.01;
-    const double x_bias = -1;
+    const double x_bias = -0.7;
     const double y_bias = -0.2;
-    const double z_bias = 0.6;
+    const double z_bias = 0.3;
     double y1_APO_fast_bias = 0;
     double y1_real_bias = 0;
     std::vector<double> trust_array_y1 = {1, 0.75, 0.5, 0.25, 0};
@@ -245,9 +245,9 @@ public:
           // filter_for_img(0.84),  // 0.8 is well
           // filter_for_deri(0.35), // 0.41 is well
           // filter_for_2deri(0.12),
-          filter_for_img(20, 9),
-          filter_for_deri(20, 3.5),
-          filter_for_2deri(20, 1.5),
+          filter_for_img(20, 9.8),
+          filter_for_deri(20, 2.5),
+          filter_for_2deri(20, 0.9),
           y_filtered_deri(0),
           y_filtered_2deri(0),
           loss_target(true),
@@ -257,15 +257,15 @@ public:
           first_time_in_fun(true),
           first_time_cal_2deri(false)
     {
-        /*A_bar << 0.623259374964953, 0.00802308176860213, 4.32511146555371e-05,
-            -5.19241525496253, 0.972263431899145, 0.00990450525611799,
-            -24.4593676568047, -0.131856429416737, 0.999544072468126;
+        A_bar << 0.641233388759048, 0.00812240265642060, 4.35985113066055e-05,
+            -4.68558842659452, 0.975064137937935, 0.00991430147112208,
+            -20.8855644377951, -0.112107162843774, 0.999613151699345;
         B_bar << 1.37568842851619e-07,
             4.97433857418070e-05,
             0.00999678544531325;
-        C_bar << 0.376740625035147,
-            5.19241525496506,
-            24.4593676568210;*/
+        C_bar << 0.358766611241019,
+            4.68558842659614,
+            20.8855644378049;
         /*A_bar << 0.704170422049836, 0.00846563257855219, 4.47917067648264e-05,
             -3.13264238771843, 0.983536297142058, 0.00994375890179147,
             -11.2677569620530, -0.0596177617039839, 0.999795686697690;
@@ -275,15 +275,15 @@ public:
         C_bar << 0.295829577950179,
             3.13264238771871,
             11.2677569620544;*/
-        A_bar << 0.634457640194048, 0.00808503158920889, 4.34679117699403e-05,
-            -4.87327452435155, 0.974028966940822, 0.00991068388354639,
-            -22.1853266807892, -0.119275949896716, 0.999588099061547;
-        B_bar << 1.37568842851619e-07,
-            4.97433857418070e-05,
-            0.00999678544531325;
-        C_bar << 0.365542359806030,
-            4.87327452435347,
-            22.1853266808012;
+        /* A_bar << 0.634457640194048, 0.00808503158920889, 4.34679117699403e-05,
+             -4.87327452435155, 0.974028966940822, 0.00991068388354639,
+             -22.1853266807892, -0.119275949896716, 0.999588099061547;
+         B_bar << 1.37568842851619e-07,
+             4.97433857418070e-05,
+             0.00999678544531325;
+         C_bar << 0.365542359806030,
+             4.87327452435347,
+             22.1853266808012;*/
         A0 << 1, 0.0100000000000000, 5.00000000000000e-05,
             0, 1, 0.0100000000000000,
             0, 0, 1;
@@ -457,7 +457,7 @@ public:
         //{
         controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
         controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 0, 1);
-        controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 0, 2); // 定高跟踪
+        controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2); // 定高跟踪
         //}
         /*else if (abs(msg->data[0]) != 0 && abs(msg->data[1]) != 0) // 跟踪误差很小 可以开始边下降边跟踪
         {
@@ -514,7 +514,7 @@ public:
         msg1.data[6] = controllerX.y_filtered_deri;
         msg1.data[7] = controllerX.y_filtered_2deri;
         msg1.data[8] = controllerX.measure;
-        cout << "消息已经发送" << endl;
+        // cout << "消息已经发送" << endl;
         pub_hat_x.publish(msg1);
     }
 

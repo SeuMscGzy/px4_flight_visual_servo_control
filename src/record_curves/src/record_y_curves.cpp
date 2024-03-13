@@ -25,7 +25,7 @@ public:
 
     void callback(const std_msgs::Float64MultiArray::ConstPtr &msg)
     {
-        cout << msg->data.size() << endl;
+        //cout << msg->data.size() << endl;
         if (msg->data.size() >= 9)
         {
             file_ << msg->data[0] << "," << msg->data[1] << "," << msg->data[2] << ","

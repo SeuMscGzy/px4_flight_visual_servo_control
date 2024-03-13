@@ -72,7 +72,6 @@ void PX4CtrlFSM::process()
 		}
 		break;
 	}
-
 	case AUTO_HOVER:
 	{
 		if (!rc_data.is_hover_mode || !odom_is_received(now_time))
@@ -116,7 +115,6 @@ void PX4CtrlFSM::process()
 		{
 			state = MANUAL_CTRL;
 			toggle_offboard_mode(false);
-
 			ROS_WARN("[px4ctrl] From CMD_CTRL(L3) to MANUAL_CTRL(L1)!");
 		}
 		else if (!rc_data.is_command_mode || !cmd_is_received(now_time) || loss_target_time_count > 7)
@@ -145,7 +143,7 @@ void PX4CtrlFSM::process()
 			{
 				if (state_data.current_state.armed)
 				{
-					ROS_ERROR("[px4ctrl] Reject are! The drone has already armed!");
+					// ROS_ERROR("[px4ctrl] Reject are! The drone has already armed!");
 				}
 				else
 				{
@@ -156,7 +154,7 @@ void PX4CtrlFSM::process()
 			{
 				if (!state_data.current_state.armed)
 				{
-					ROS_ERROR("[px4ctrl] Reject disarm! The drone has already disarmed!");
+					// ROS_ERROR("[px4ctrl] Reject disarm! The drone has already disarmed!");
 				}
 				else
 				{
@@ -223,23 +221,25 @@ void PX4CtrlFSM::loss_target_callback(const std_msgs::Float64MultiArray::ConstPt
 void PX4CtrlFSM::land_detector(const State_t state, const Desired_State_t &des, const Odom_Data_t &odom)
 {
 	static State_t last_state = State_t::MANUAL_CTRL;
-	if (last_state == State_t::MANUAL_CTRL && (state == State_t::AUTO_HOVER || state == State_t::AUTO_TAKEOFF))
+	if (last_state == State_t::MANUAL_CTRL && state == State_t::AUTO_HOVER)
+	{
+		takeoff_land.landed = false; // Always holds
+	}
+	if (state == State_t::AUTO_HOVER && des.p(2) > 0.1)
 	{
 		takeoff_land.landed = false; // Always holds
 	}
 	last_state = state;
-
 	if (state == State_t::MANUAL_CTRL && !state_data.current_state.armed)
 	{
 		takeoff_land.landed = true;
 		return; // No need of other decisions
 	}
-	// cout << takeoff_land.landed << endl;
 
 	// land_detector parameters
 	constexpr double POSITION_DEVIATION_C = -0.25; // Constraint 1: target position below real position for POSITION_DEVIATION_C meters.
 	constexpr double VELOCITY_THR_C = 0.1;		   // Constraint 2: velocity below VELOCITY_MIN_C m/s.
-	constexpr double TIME_KEEP_C = 1.5;			   // Constraint 3: Time(s) the Constraint 1&2 need to keep.
+	constexpr double TIME_KEEP_C = 4;			   // Constraint 3: Time(s) the Constraint 1&2 need to keep.
 
 	static ros::Time time_C12_reached; // time_Constraints12_reached
 	static bool is_last_C12_satisfy;
@@ -262,9 +262,9 @@ void PX4CtrlFSM::land_detector(const State_t state, const Desired_State_t &des, 
 				takeoff_land.landed = true;
 			}
 		}
-
 		is_last_C12_satisfy = C12_satisfy;
 	}
+	// cout << takeoff_land.landed << endl;
 }
 
 Desired_State_t PX4CtrlFSM::get_hover_des() // 先得到hover_pose,再得到hover_des
@@ -276,7 +276,6 @@ Desired_State_t PX4CtrlFSM::get_hover_des() // 先得到hover_pose,再得到hove
 	des.j = Eigen::Vector3d::Zero();
 	des.yaw = hover_pose(3);
 	des.yaw_rate = 0.0;
-
 	return des;
 }
 
@@ -289,10 +288,8 @@ Desired_State_t PX4CtrlFSM::get_cmd_des()
 	des.j = cmd_data.j;
 	des.yaw = cmd_data.yaw;
 	des.yaw_rate = cmd_data.yaw_rate;
-
 	return des;
 }
-
 
 void PX4CtrlFSM::set_hov_with_odom() // 得到hov_pose 用惯性系的位置和偏航角来确定悬停的位置和偏航，因为是悬停，所以不涉及速度、加速度以及俯仰角、滚转角等
 {
@@ -307,10 +304,10 @@ void PX4CtrlFSM::set_hov_with_rc() // 得到hov_pose 用遥控器来决定无人
 	ros::Time now = ros::Time::now();
 	double delta_t = (now - last_set_hover_pose_time).toSec();
 	last_set_hover_pose_time = now;
-	hover_pose(0) += rc_data.ch[1] * param.max_manual_vel * delta_t * (param.rc_reverse.pitch ? -1 : 1);	// 通道1决定俯仰角？
-	hover_pose(1) += rc_data.ch[0] * param.max_manual_vel * delta_t * (param.rc_reverse.roll ? 1 : -1);		// 通道0决定滚转角？
-	hover_pose(2) += rc_data.ch[2] * param.max_manual_vel * delta_t * (param.rc_reverse.throttle ? -1 : 1); // 通道2是油门？
-	hover_pose(3) += rc_data.ch[3] * param.max_manual_vel * delta_t * (param.rc_reverse.yaw ? 1 : -1);		// 通道3是偏航？
+	hover_pose(0) += 0.5 * rc_data.ch[1] * param.max_manual_vel * delta_t * (param.rc_reverse.pitch ? -1 : 1);	  // 通道1决定俯仰角？
+	hover_pose(1) += 0.5 * rc_data.ch[0] * param.max_manual_vel * delta_t * (param.rc_reverse.roll ? 1 : -1);	  // 通道0决定滚转角？
+	hover_pose(2) += 0.5 * rc_data.ch[2] * param.max_manual_vel * delta_t * (param.rc_reverse.throttle ? -1 : 1); // 通道2是油门？
+	hover_pose(3) += 0.5 * rc_data.ch[3] * param.max_manual_vel * delta_t * (param.rc_reverse.yaw ? 1 : -1);	  // 通道3是偏航？
 
 	if (hover_pose(2) < -0.35) // 不能再往下面走了，已经在地面上了
 		hover_pose(2) = -0.35;
@@ -356,46 +353,73 @@ void PX4CtrlFSM::publish_acceleration_ctrl(const Controller_Output_t &u, const r
 {
 	if (get_landed())
 	{
-		mavros_msgs::AttitudeTarget msg;
-		msg.header.stamp = stamp;
-		msg.header.frame_id = std::string("FCU");
-		msg.type_mask = mavros_msgs::AttitudeTarget::IGNORE_ROLL_RATE |
-						mavros_msgs::AttitudeTarget::IGNORE_PITCH_RATE |
-						mavros_msgs::AttitudeTarget::IGNORE_YAW_RATE;
-		msg.orientation.x = imu_data.q.x();
-		msg.orientation.y = imu_data.q.y();
-		msg.orientation.z = imu_data.q.z();
-		msg.orientation.w = imu_data.q.w();
-		// msg.thrust = current_thrust;
-		msg.thrust = 0.02;
-		ctrl_FCU_pub_land.publish(msg);
-		// toggle_arm_disarm(false);
-		if (state_data.current_state.armed)
-		{
-			toggle_arm_disarm(false); // 锁电机
-		}
-	}
-	else
-	{
 		mavros_msgs::PositionTarget msg;
 		msg.header.stamp = ros::Time::now();
 		msg.coordinate_frame = mavros_msgs::PositionTarget::FRAME_LOCAL_NED;
-		msg.type_mask = mavros_msgs::PositionTarget::IGNORE_VX |
-						mavros_msgs::PositionTarget::IGNORE_VY |
-						mavros_msgs::PositionTarget::IGNORE_VZ |
-						mavros_msgs::PositionTarget::IGNORE_PX |
+		msg.type_mask = mavros_msgs::PositionTarget::IGNORE_PX |
 						mavros_msgs::PositionTarget::IGNORE_PY |
 						mavros_msgs::PositionTarget::IGNORE_PZ |
+						mavros_msgs::PositionTarget::IGNORE_AFX |
+						mavros_msgs::PositionTarget::IGNORE_AFY |
+						mavros_msgs::PositionTarget::IGNORE_AFZ |
+						mavros_msgs::PositionTarget::IGNORE_YAW |
 						mavros_msgs::PositionTarget::IGNORE_YAW_RATE;
 		// 设置你想要的加速度值
-		msg.acceleration_or_force.x = u.acc_world[0]; // X轴加速度
-		msg.acceleration_or_force.y = u.acc_world[1]; // Y轴加速度
-		msg.acceleration_or_force.z = u.acc_world[2];
+		msg.velocity.x = u.acc_world[0]; // X轴速度
+		msg.velocity.y = u.acc_world[1]; // Y轴速度
+		msg.velocity.z = u.acc_world[2];
 		// Z轴加速度
 		// cout << u.acc_world[2] << endl;
 		// 设置偏航角（以弧度为单位）
-		msg.yaw = u.des_yaw; // 偏航角，例如，1.57弧度约等于90度
+		// msg.yaw = u.des_yaw; // 偏航角，例如，1.57弧度约等于90度
 		ctrl_FCU_pub.publish(msg);
+	}
+	else
+	{
+		if (state == CMD_CTRL)
+		{
+			mavros_msgs::PositionTarget msg;
+			msg.header.stamp = ros::Time::now();
+			msg.coordinate_frame = mavros_msgs::PositionTarget::FRAME_LOCAL_NED;
+			msg.type_mask = mavros_msgs::PositionTarget::IGNORE_PX |
+							mavros_msgs::PositionTarget::IGNORE_PY |
+							mavros_msgs::PositionTarget::IGNORE_PZ |
+							mavros_msgs::PositionTarget::IGNORE_VX |
+							mavros_msgs::PositionTarget::IGNORE_VY |
+							mavros_msgs::PositionTarget::IGNORE_VZ |
+							mavros_msgs::PositionTarget::IGNORE_YAW_RATE;
+			// 设置你想要的加速度值
+			msg.acceleration_or_force.x = u.acc_world[0]; // X轴加速度
+			msg.acceleration_or_force.y = u.acc_world[1]; // Y轴加速度
+			msg.acceleration_or_force.z = u.acc_world[2];
+			// Z轴加速度
+			// cout << u.acc_world[2] << endl;
+			// 设置偏航角（以弧度为单位）
+			msg.yaw = u.des_yaw; // 偏航角，例如，1.57弧度约等于90度
+			ctrl_FCU_pub.publish(msg);
+		}
+		else
+		{
+			mavros_msgs::PositionTarget msg;
+			msg.header.stamp = ros::Time::now();
+			msg.coordinate_frame = mavros_msgs::PositionTarget::FRAME_LOCAL_NED;
+			msg.type_mask = mavros_msgs::PositionTarget::IGNORE_PX |
+							mavros_msgs::PositionTarget::IGNORE_PY |
+							mavros_msgs::PositionTarget::IGNORE_PZ |
+							mavros_msgs::PositionTarget::IGNORE_AFX |
+							mavros_msgs::PositionTarget::IGNORE_AFY |
+							mavros_msgs::PositionTarget::IGNORE_AFZ |
+							mavros_msgs::PositionTarget::IGNORE_YAW_RATE;
+			// 设置你想要的加速度值
+			msg.velocity.x = u.acc_world[0]; // X轴加速度
+			msg.velocity.y = u.acc_world[1]; // Y轴加速度
+			msg.velocity.z = u.acc_world[2];
+			// Z轴加速度
+			// cout << u.acc_world[2] << endl;
+			// 设置偏航角（以弧度为单位）
+			msg.yaw = u.des_yaw; // 偏航角，例如，1.57弧度约等于90度
+			ctrl_FCU_pub.publish(msg);
+		}
 	}
 }
 
@@ -404,7 +428,6 @@ void PX4CtrlFSM::publish_trigger(const nav_msgs::Odometry &odom_msg)
 	geometry_msgs::PoseStamped msg;
 	msg.header.frame_id = "world";
 	msg.pose = odom_msg.pose.pose;
-
 	traj_start_trigger_pub.publish(msg);
 }
 
@@ -465,4 +488,3 @@ bool PX4CtrlFSM::toggle_arm_disarm(bool arm)
 
 	return true;
 }
-
