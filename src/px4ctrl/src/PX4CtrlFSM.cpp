@@ -66,6 +66,7 @@ void PX4CtrlFSM::process()
 			}
 
 			state = AUTO_HOVER;
+			controller.resetThrustMapping();
 			set_hov_with_odom(); // 使用里程计当前的信息进行悬停
 			toggle_offboard_mode(true);
 			ROS_INFO("\033[32m[px4ctrl] MANUAL_CTRL(L1) --> AUTO_HOVER(L2)\033[32m");
@@ -78,7 +79,6 @@ void PX4CtrlFSM::process()
 		{
 			state = MANUAL_CTRL;
 			toggle_offboard_mode(false);
-
 			ROS_WARN("[px4ctrl] AUTO_HOVER(L2) --> MANUAL_CTRL(L1)");
 		}
 		else if (rc_data.is_command_mode && cmd_is_received(now_time) && loss_target_time_count == 0 && !takeoff_land_data.triggered)
@@ -164,7 +164,14 @@ void PX4CtrlFSM::process()
 		}
 	}
 
-	// STEP3: solve and update new control commands
+	// STEP3: estimate thrust model
+	if (state == AUTO_HOVER || state == CMD_CTRL)
+	{
+		// controller.estimateThrustModel(imu_data.a, bat_data.volt, param);
+		controller.estimateThrustModel(imu_data.a, param);
+	}
+
+	// STEP4: solve and update new control commands
 	if (state == CMD_CTRL)
 	{
 		bool is_cmd_mode = true;
@@ -185,21 +192,21 @@ void PX4CtrlFSM::process()
 		debug_pub.publish(debug_msg);
 	}
 
-	// STEP4: publish control commands to mavros
+	// STEP5: publish control commands to mavros
 	publish_acceleration_ctrl(u, now_time);
 
-	// STEP5: Detect if the drone has landed
+	// STEP6: Detect if the drone has landed
 	land_detector(state, des, odom_data);
 	// cout << takeoff_land.landed << endl;
 	//  fflush(stdout);
 
-	// STEP6: Clear flags beyound their lifetime
+	// STEP7: Clear flags beyound their lifetime
 	rc_data.enter_hover_mode = false;
 	rc_data.enter_command_mode = false;
 	// rc_data.toggle_reboot = false;
 	takeoff_land_data.triggered = false;
 
-	// STEP7: publish the current state of state machine
+	// STEP8: publish the current state of state machine
 	publish_state();
 }
 
@@ -376,25 +383,22 @@ void PX4CtrlFSM::publish_acceleration_ctrl(const Controller_Output_t &u, const r
 	}
 	else
 	{*/
+	mavros_msgs::AttitudeTarget msg;
 
-	mavros_msgs::PositionTarget msg;
-	msg.header.stamp = ros::Time::now();
-	msg.coordinate_frame = mavros_msgs::PositionTarget::FRAME_LOCAL_NED;
-	msg.type_mask = mavros_msgs::PositionTarget::IGNORE_PX |
-					mavros_msgs::PositionTarget::IGNORE_PY |
-					mavros_msgs::PositionTarget::IGNORE_PZ |
-					mavros_msgs::PositionTarget::IGNORE_VX |
-					mavros_msgs::PositionTarget::IGNORE_VY |
-					mavros_msgs::PositionTarget::IGNORE_VZ |
-					mavros_msgs::PositionTarget::IGNORE_YAW_RATE;
-	// 设置你想要的加速度值
-	msg.acceleration_or_force.x = u.acc_world[0]; // X轴加速度
-	msg.acceleration_or_force.y = u.acc_world[1]; // Y轴加速度
-	msg.acceleration_or_force.z = u.acc_world[2];
-	// Z轴加速度
-	// cout << u.acc_world[2] << endl;
-	// 设置偏航角（以弧度为单位）
-	msg.yaw = u.des_yaw; // 偏航角，例如，1.57弧度约等于90度
+	msg.header.stamp = stamp;
+	msg.header.frame_id = std::string("FCU");
+
+	msg.type_mask = mavros_msgs::AttitudeTarget::IGNORE_ROLL_RATE |
+					mavros_msgs::AttitudeTarget::IGNORE_PITCH_RATE |
+					mavros_msgs::AttitudeTarget::IGNORE_YAW_RATE;
+
+	msg.orientation.x = u.q.x();
+	msg.orientation.y = u.q.y();
+	msg.orientation.z = u.q.z();
+	msg.orientation.w = u.q.w();
+
+	msg.thrust = u.thrust;
+
 	ctrl_FCU_pub.publish(msg);
 
 	/*mavros_msgs::PositionTarget msg;
