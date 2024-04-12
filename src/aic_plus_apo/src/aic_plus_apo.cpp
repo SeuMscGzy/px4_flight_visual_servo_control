@@ -19,28 +19,28 @@ using namespace std;
 class AIC3Controller
 {
 private:
-    const double e_1 = 4.0;
-    const double e_2 = 4.0;
-    const double e_3 = 4.0;
+    const double e_1 = 3.0;
+    const double e_2 = 3.0;
+    const double e_3 = 3.0;
     const double k_l = 1.0;
-    const double sigma_z1_inv = 0.2;
-    const double sigma_z2_inv = 0.2;
-    const double sigma_z3_inv = 0.2;
+    const double sigma_z1_inv = 0.3;
+    const double sigma_z2_inv = 0.3;
+    const double sigma_z3_inv = 0.3;
     const double sigma_w1_inv = 1.0;
     const double sigma_w2_inv = 1.0;
     const double sigma_w3_inv = 1.0;
-    const double k_i = -1;
-    const double k_p = -3;
-    const double k_d = -2.5; // 逐渐增大
+    double k_i = -3;
+    double k_p = -1.5;
+    double k_d = 0; // 逐渐增大
     const double T_c = 0.01;
     const double x_bias = -1;
     const double y_bias = -0.2;
     const double z_bias = 0.3;
+    const std::vector<double> trust_array_y1 = {1, 0.75, 0.5, 0.25, 0};
+    const std::vector<double> trust_array_y2 = {0.6, 0.6, 0.6, 0.6, 0.6};
+    const std::vector<double> trust_array_y3 = {0.5, 0.5, 0.5, 0.5, 0.5};
     double y1_APO_fast_bias = 0;
     double y1_real_bias = 0;
-    std::vector<double> trust_array_y1 = {1, 0.75, 0.5, 0.25, 0};
-    std::vector<double> trust_array_y2 = {0.7, 0.7, 0.7, 0.7, 0.7};
-    std::vector<double> trust_array_y3 = {0.5, 0.5, 0.5, 0.5, 0.5};
 
 public:
     void computeControl(int time_count, bool use_y1_real, double y1_real_slow, double y1_APO_fast, double y2_derivative_sampling, double y2_APO_fast, double y3_real_slow, double y3_APO_fast, double mu_last, double mu_p_last, double mu_pp_last, double u_last, std::atomic<double> &u, double &delta_u, double &mu, double &mu_p, double &mu_pp, bool use_bias, int which_axis)
@@ -88,6 +88,9 @@ public:
                 }
                 else
                 {
+                    k_i = -6;
+                    k_p = -6;
+                    k_d = 0;
                     y1_APO_fast_bias = y1_APO_fast + z_bias;
                     y1_real_bias = y1_real_slow + z_bias;
                 }
@@ -106,9 +109,19 @@ public:
             delta_u = T_c * (k_i * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu)) + k_p * ((1 - trust_param_y2) * (y2_APO_fast - mu_p) + trust_param_y2 * (y2_derivative_sampling - mu_p)) + k_d * ((1 - trust_param_y3) * (y3_APO_fast - mu_pp) + trust_param_y3 * (y3_real_slow - mu_pp)));
             u = double(u_last - delta_u);
         }
-        if (abs(u) >= 0.1) // 控制量限幅
+        if (which_axis == 2) // 控制量限幅
         {
-            u = 0.1 * u / abs(u);
+            if (abs(u) >= 0.4)
+            {
+                u = 0.4 * u / abs(u);
+            }
+        }
+        else
+        {
+            if (abs(u) >= 0.25)
+            {
+                u = 0.25 * u / abs(u);
+            }
         }
     }
 };
@@ -145,11 +158,13 @@ public:
     }
 };
 
+#include <cmath> // Include for M_PI and tan functions
+
 class ButterworthLowPassFilter
 {
 private:
-    double fs; // 采样频率
-    double fc; // 截止频率
+    double fs; // Sampling frequency
+    double fc; // Cutoff frequency
     double a0, a1, a2, b1, b2;
     double prevX1, prevX2, prevY1, prevY2;
 
@@ -184,6 +199,16 @@ public:
     void reset()
     {
         prevX1 = prevX2 = prevY1 = prevY2 = 0;
+    }
+
+    // 添加一个新方法来初始化状态
+    void initialize(double initialPrevX1, double initialPrevX2,
+                    double initialPrevY1, double initialPrevY2)
+    {
+        prevX1 = initialPrevX1;
+        prevX2 = initialPrevX2;
+        prevY1 = initialPrevY1;
+        prevY2 = initialPrevY2;
     }
 };
 
@@ -245,8 +270,8 @@ public:
           // filter_for_img(0.84),  // 0.8 is well
           // filter_for_deri(0.35), // 0.41 is well
           // filter_for_2deri(0.12),
-          filter_for_img(20, 9.9),
-          filter_for_deri(20, 2.0),
+          filter_for_img(20, 9),
+          filter_for_deri(20, 1.7),
           filter_for_2deri(20, 0.8),
           y_filtered_deri(0),
           y_filtered_2deri(0),
@@ -257,24 +282,24 @@ public:
           first_time_in_fun(true),
           first_time_cal_2deri(false)
     {
-        /*A_bar << 0.641233388759048, 0.00812240265642060, 4.35985113066055e-05,
-            -4.68558842659452, 0.975064137937935, 0.00991430147112208,
-            -20.8855644377951, -0.112107162843774, 0.999613151699345;
+        /*A_bar << 0.765683321680610, 0.00879475512314395, 4.59256142200729e-05,
+            -1.93446724077435, 0.989949577320781, 0.00996585828575581,
+            -5.40107899000078, -0.0282040678329022, 0.999903954202982;
         B_bar << 1.37568842851619e-07,
             4.97433857418070e-05,
             0.00999678544531325;
-        C_bar << 0.358766611241019,
-            4.68558842659614,
-            20.8855644378049;*/
-        A_bar << 0.657210525272494, 0.00821019227910725, 4.39047715460281e-05,
-            -4.25902626859400, 0.977408024157677, 0.00992247836940234,
-            -18.0377924371986, -0.0964587830866237, 0.999667743331513;
+        C_bar << 0.234316678319393,
+            1.93446724077439,
+            5.40107899000092;*/
+        A_bar << 0.728394121518948, 0.00859595547134162, 4.52418709017980e-05,
+            -2.62402851230428, 0.986272785659196, 0.00995321159839556,
+            -8.59595547134162, -0.0452418709017980, 0.999845346929735;
         B_bar << 1.37568842851619e-07,
             4.97433857418070e-05,
             0.00999678544531325;
-        C_bar << 0.342789474727553,
-            4.25902626859507,
-            18.0377924372048;
+        C_bar << 0.271605878481060,
+            2.62402851230442,
+            8.59595547134221;
         /* A_bar << 0.634457640194048, 0.00808503158920889, 4.34679117699403e-05,
              -4.87327452435155, 0.974028966940822, 0.00991068388354639,
              -22.1853266807892, -0.119275949896716, 0.999588099061547;
@@ -300,7 +325,11 @@ public:
         which_axis_ = which_axis;
         measure = measure_single_axis;
         y_real = measure;
-        y_real = filter_for_img.filter(y_real);
+        /*if (first_time_in_fun)
+        {
+            filter_for_img.initialize(y_real, y_real, y_real, y_real);
+        }
+        y_real = filter_for_img.filter(y_real);*/
 
         time_now = ros::Time::now().toSec();
         time_pass = time_now - time_last;
@@ -311,16 +340,16 @@ public:
 
         if (first_time_cal_2deri)
         {
-            y_real_derivative_last = y_real_derivative;
+            y_real_derivative_last = y_filtered_deri;
             first_time_cal_2deri = false;
         }
 
         // Compute the second derivative
-        y_real_second_derivative = (y_real_derivative - y_real_derivative_last) / time_pass;
+        y_real_second_derivative = (y_filtered_deri - y_real_derivative_last) / time_pass;
         y_filtered_2deri = filter_for_2deri.filter(y_real_second_derivative);
 
         // Update the last values for the next iteration
-        y_real_derivative_last = y_real_derivative;
+        y_real_derivative_last = y_filtered_deri;
         y_real_last = y_real;
         timer_count++;
         timer = nh.createTimer(ros::Duration(0.01), &MyController::timerCallback, this);
@@ -376,7 +405,8 @@ public:
             else
             {
                 Eigen::Vector3d coeff(1, 0, 0);
-                predict_y = coeff.transpose() * (A0 * hat_x_last + B0 * delta_u_last);
+                // predict_y = coeff.transpose() * (A0 * hat_x_last + B0 * delta_u_last);
+                predict_y = hat_x(0);
                 hat_x = A_bar * hat_x_last + B_bar * delta_u_last + C_bar * predict_y_last;
                 aic3controller.computeControl(timer_count, 1, y_real, hat_x(0), y_filtered_deri, hat_x(1), y_filtered_2deri, hat_x(2), mu_last, mu_p_last, mu_pp_last, u_last, u, delta_u, mu, mu_p, mu_pp, use_bias, which_axis);
                 // sampleddatacontroller.computeControl(hat_x(0), hat_x(1), hat_x(2), u);
@@ -430,12 +460,12 @@ public:
     TripleAxisController()
         : nh("~")
     {
-        sub = nh.subscribe("/delay_sent_50ms", 1, &TripleAxisController::callback, this);
-        ground_truth_sub = nh.subscribe("/vrpn_client_node/MCServer/5/velocity", 1, &TripleAxisController::ground_truth_callback, this);
-        ground_truth_second_sub = nh.subscribe("/vrpn_client_node/MCServer/5/acceleration", 1, &TripleAxisController::ground_truth_second_callback, this);
-        pub_hat_x = nh.advertise<std_msgs::Float64MultiArray>("/hat_x_topic", 100);
-        acc_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/acc_cmd", 100);
-        land_pub = nh.advertise<quadrotor_msgs::TakeoffLand>("/px4ctrl/takeoff_land", 100);
+        sub = nh.subscribe("/delay_sent_50ms", 0, &TripleAxisController::callback, this);
+        ground_truth_sub = nh.subscribe("/mavros/local_position/velocity_local", 0, &TripleAxisController::ground_truth_callback, this);
+        ground_truth_second_sub = nh.subscribe("/vrpn_client_node/MCServer/5/acceleration", 0, &TripleAxisController::ground_truth_second_callback, this);
+        pub_hat_x = nh.advertise<std_msgs::Float64MultiArray>("/hat_x_topic", 0);
+        acc_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/acc_cmd", 0);
+        land_pub = nh.advertise<quadrotor_msgs::TakeoffLand>("/px4ctrl/takeoff_land", 0);
         control_update_timer = nh.createTimer(ros::Duration(0.01), &TripleAxisController::controlUpdate, this);
     }
 
@@ -497,9 +527,10 @@ public:
             msg1.data[i] = controllerX.hat_x(i);
         }
         msg1.data[3] = controllerX.y_real;
-        // msg1.data[4] = controllerX.y_real_derivative;
         msg1.data[4] = -ground_truth_first_deri_x;
-        msg1.data[5] = -ground_truth_second_deri_x;
+        // msg1.data[5] = -ground_truth_second_deri_x;*/
+        // msg1.data[4] = controllerX.y_real_derivative;
+        msg1.data[5] = controllerX.y_real_second_derivative;
         msg1.data[6] = controllerX.y_filtered_deri;
         msg1.data[7] = controllerX.y_filtered_2deri;
         msg1.data[8] = controllerX.measure;

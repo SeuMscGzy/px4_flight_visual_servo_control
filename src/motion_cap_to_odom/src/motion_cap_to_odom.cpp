@@ -2,26 +2,33 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/TwistStamped.h>
 #include <nav_msgs/Odometry.h>
-#include <message_filters/subscriber.h>
-#include <message_filters/time_synchronizer.h>
-#include <message_filters/sync_policies/approximate_time.h>
 
 ros::Publisher odom_pub;
+geometry_msgs::PoseStamped pose;
+geometry_msgs::TwistStamped vel;
 
-void callback(const geometry_msgs::PoseStamped::ConstPtr &pose_msg,
-              const geometry_msgs::TwistStamped::ConstPtr &twist_msg)
+void POSEcallback(const geometry_msgs::PoseStamped::ConstPtr &pose_msg)
+{
+    pose = *pose_msg;
+}
+
+void VELcallback(const geometry_msgs::TwistStamped::ConstPtr &twist_msg)
+{
+    vel = *twist_msg;
+}
+
+void timerCallback(const ros::TimerEvent &)
 {
     nav_msgs::Odometry odom;
-    odom.header.stamp = pose_msg->header.stamp; // 可以选择pose或twist的时间戳
-    odom.header.frame_id = "world";             // 根据需要修改
-    odom.child_frame_id = "";                   // 或您的机器人的相应帧ID
+    // 填充消息
+    odom.header.stamp = ros::Time::now(); // 或者使用 pose.header.stamp 或 vel.header.stamp
+    odom.header.frame_id = "world";
 
-    // 设置位姿
-    odom.pose.pose = pose_msg->pose;
+    // 需要从 PoseStamped 和 TwistStamped 中提取 Pose 和 Twist
+    odom.pose.pose = pose.pose;
+    odom.twist.twist = vel.twist;
 
-    // 设置速度
-    odom.twist.twist = twist_msg->twist;
-
+    // 发布消息
     odom_pub.publish(odom);
 }
 
@@ -30,16 +37,14 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "sync_pose_and_velocity");
     ros::NodeHandle nh;
 
-    odom_pub = nh.advertise<nav_msgs::Odometry>("/vins_fusion/imu_propagate", 50);
+    odom_pub = nh.advertise<nav_msgs::Odometry>("/vins_fusion/imu_propagate", 1);
 
-    // 设置message_filters订阅器
-    message_filters::Subscriber<geometry_msgs::PoseStamped> pose_sub(nh, "/vrpn_client_node/MCServer/5/pose", 10);
-    message_filters::Subscriber<geometry_msgs::TwistStamped> twist_sub(nh, "/vrpn_client_node/MCServer/5/velocity", 10);
+    // 订阅位姿和速度消息
+    ros::Subscriber pose_sub = nh.subscribe("/vrpn_client_node/MCServer/5/pose", 1, POSEcallback);
+    ros::Subscriber twist_sub = nh.subscribe("/vrpn_client_node/MCServer/5/velocity", 1, VELcallback);
 
-    // 使用ApproximateTime策略同步消息
-    typedef message_filters::sync_policies::ApproximateTime<geometry_msgs::PoseStamped, geometry_msgs::TwistStamped> MySyncPolicy;
-    message_filters::Synchronizer<MySyncPolicy> sync(MySyncPolicy(15), pose_sub, twist_sub);
-    sync.registerCallback(boost::bind(&callback, _1, _2));
+    // 创建定时器以160Hz的频率调用timerCallback
+    ros::Timer timer = nh.createTimer(ros::Duration(1.0 / 160.0), timerCallback);
 
     ros::spin();
     return 0;

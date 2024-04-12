@@ -46,38 +46,48 @@ struct Controller_Output_t
 	// Collective mass normalized thrust
 	double thrust;
 
-	//Eigen::Vector3d des_v_real;
-};
+	Eigen::Vector3d vel; // [rad/s]
 
+	Eigen::Vector3d acc;
+
+	double yaw;
+
+	bool use_attitude_or_acc;
+	// Eigen::Vector3d des_v_real;
+};
 
 class LinearControl
 {
 public:
-  LinearControl(Parameter_t &);
-  quadrotor_msgs::Px4ctrlDebug calculateControl(const Desired_State_t &des,
-      const Odom_Data_t &odom,
-      const Imu_Data_t &imu, 
-      Controller_Output_t &u, bool is_cmd_mode_);
-  bool estimateThrustModel(const Eigen::Vector3d &est_v,
-      const Parameter_t &param);
-  void resetThrustMapping(void);
+	LinearControl(Parameter_t &);
+	quadrotor_msgs::Px4ctrlDebug calculateControl(const Desired_State_t &des,
+												  const Odom_Data_t &odom,
+												  const Imu_Data_t &imu,
+												  Controller_Output_t &u, int state_count);
+	bool estimateThrustModel(const Eigen::Vector3d &est_v,
+							 const Parameter_t &param);
+	void resetThrustMapping(void);
 
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
 private:
-  Parameter_t param_;
-  quadrotor_msgs::Px4ctrlDebug debug_msg_;
-  std::queue<std::pair<ros::Time, double>> timed_thrust_;
-  static constexpr double kMinNormalizedCollectiveThrust_ = 3.0;
+	Parameter_t param_;
+	quadrotor_msgs::Px4ctrlDebug debug_msg_;
+	double last_thrust = 0.01;
+	std::queue<std::pair<ros::Time, double>> timed_thrust_;
+	static constexpr double kMinNormalizedCollectiveThrust_ = 3.0;
 
-  // Thrust-accel mapping params
-  const double rho2_ = 0.998; // do not change
-  double thr2acc_;
-  double P_;
-
-  double computeDesiredCollectiveThrustSignal(const Eigen::Vector3d &des_acc);
-  double fromQuaternion2yaw(Eigen::Quaterniond q);
+	// Thrust-accel mapping params
+	const double rho2_ = 0.998; // do not change
+	double thr2acc_;
+	double P_;
+	int last_state_count = 1;
+	int enter_count = 200;
+	int takeoff_count = 500;
+	bool in_the_slow_thrust = false;
+	bool last_in_the_slow_thrust = false;
+	double computeDesiredCollectiveThrustSignal(const Eigen::Vector3d &des_acc);
+	double fromQuaternion2yaw(Eigen::Quaterniond q);
 };
-
 
 #endif

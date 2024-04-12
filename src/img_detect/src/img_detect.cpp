@@ -6,6 +6,7 @@
 #include <visp3/sensor/vpRealSense2.h>
 #include <visp3/detection/vpDetectorAprilTag.h>
 #include <visp3/gui/vpDisplayGDI.h>
+#include <visp3/core/vpImageConvert.h>
 #include <visp3/gui/vpDisplayX.h>
 #include <visp3/core/vpXmlParserCamera.h>
 #include <std_msgs/Float64MultiArray.h>
@@ -65,24 +66,19 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "object_detector");
     ros::NodeHandle nh;
-    image_transport::ImageTransport it(nh);
-    image_transport::Publisher pub = it.advertise("camera/image", 1);
-
+    ros::Publisher pub = nh.advertise<sensor_msgs::Image>("camera/image", 1);
     ros::Publisher pbvs_publisher = nh.advertise<std_msgs::Float64MultiArray>("/object_pose", 1);
-    ros::Publisher ibvs_publisher = nh.advertise<std_msgs::Float64MultiArray>("/object_pixel", 1);
     std_msgs::Float64MultiArray ros_pbvs_msg;
-    std_msgs::Float64MultiArray ros_ibvs_msg;
     ros_pbvs_msg.data.resize(6, 0.0);
-    ros_ibvs_msg.data.resize(8, 0.0);
 #if defined(VISP_HAVE_APRILTAG) &&                                                                                                   \
     (defined(VISP_HAVE_V4L2) || defined(VISP_HAVE_DC1394) || defined(VISP_HAVE_CMU1394) || (VISP_HAVE_OPENCV_VERSION >= 0x020100) || \
      defined(VISP_HAVE_FLYCAPTURE) || defined(VISP_HAVE_REALSENSE2))
     int opt_device = 0; // For OpenCV and V4l2 grabber to set the camera device
     vpDetectorAprilTag::vpAprilTagFamily tagFamily = vpDetectorAprilTag::TAG_36h11;
     vpDetectorAprilTag::vpPoseEstimationMethod poseEstimationMethod = vpDetectorAprilTag::HOMOGRAPHY_VIRTUAL_VS;
-    double tagSize = 0.075;
+    double tagSize = 0.111;
     float quad_decimate = 1.0;
-    int nThreads = 1;
+    int nThreads = 2;
     std::string intrinsic_file = "";
     std::string camera_name = "";
     bool display_tag = false;
@@ -187,14 +183,9 @@ int main(int argc, char **argv)
         rs2::config config;
         config.disable_stream(RS2_STREAM_DEPTH);
         config.disable_stream(RS2_STREAM_INFRARED);
-        config.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_RGBA8, 30);
+        config.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_RGBA8, 60);
         g.open(config);
         g.acquire(I);
-        vpImage<unsigned char> flippedImage;
-        flipImage(I, flippedImage, -1); // 假设-1表示同时水平和垂直翻转
-        // cout << "here" << endl;
-        //  如果需要，可以在这里将翻转后的图像赋值回I
-        I = flippedImage;
         std::cout << "Read camera parameters from Realsense device" << std::endl;
         cam = g.getCameraParameters(RS2_STREAM_COLOR, vpCameraParameters::perspectiveProjWithoutDistortion);
 #elif defined(VISP_HAVE_OPENCV)
@@ -209,6 +200,7 @@ int main(int argc, char **argv)
         g >> frame; // get a new frame from camera
         vpImageConvert::convert(frame, I);
 #endif
+        // cam.initPersProjWithoutDistortion(624.0332259850711, 628.0029537115205, 639.1626114821913, 352.31719499273044);
         std::cout << cam << std::endl;
         std::cout << "poseEstimationMethod: " << poseEstimationMethod << std::endl;
         std::cout << "tagFamily: " << tagFamily << std::endl;
@@ -232,62 +224,67 @@ int main(int argc, char **argv)
         detector.setDisplayTag(display_tag, color_id < 0 ? vpColor::none : vpColor::getColor(color_id), thickness);
         detector.setZAlignedWithCameraAxis(align_frame);
         std::vector<double> time_vec;
-        for (;;)
+        ros::Rate rate2(20);
+        while (ros::ok())
         {
 #if defined(VISP_HAVE_V4L2) || defined(VISP_HAVE_DC1394) || defined(VISP_HAVE_CMU1394) || defined(VISP_HAVE_FLYCAPTURE) || defined(VISP_HAVE_REALSENSE2)
+            double img_recieve = ros::Time::now().toSec();
             g.acquire(I);
+            double image_time = ros::Time::now().toSec();
 #elif defined(VISP_HAVE_OPENCV)
             g >> frame;
             vpImageConvert::convert(frame, I);
 #endif
             vpImage<unsigned char> flippedImage;
             flipImage(I, flippedImage, -1); // 假设-1表示同时水平和垂直翻转
-            // cout << "here" << endl;
-            // 如果需要，可以在这里将翻转后的图像赋值回I
             I = flippedImage;
-            vpDisplay::display(I);
-            double t = vpTime::measureTimeMs();
+            /*cv::Mat imageMat;
+            // 使用Visp的函数将vpImage转换为cv::Mat
+            vpImageConvert::convert(I, imageMat);
+
+            // 创建Header，并设置时间戳为当前时间
+            std_msgs::Header header;
+            header.stamp = ros::Time::now();
+
+            // 现在你可以使用cv_bridge将cv::Mat转换为sensor_msgs/Image了
+            sensor_msgs::ImagePtr msg = cv_bridge::CvImage(header, "mono8", imageMat).toImageMsg();
+            pub.publish(msg);*/
+            // vpDisplay::display(I);
+            // double t = vpTime::measureTimeMs();
             std::vector<vpHomogeneousMatrix> cMo_vec;
-            std::vector<vpImagePoint> pixel_vec;
+            // std::vector<vpImagePoint> pixel_vec;
             vpHomogeneousMatrix pose_matrix;
             detector.detect(I, tagSize, cam, cMo_vec);
-
-            t = vpTime::measureTimeMs() - t;
-            time_vec.push_back(t);
+            /*double img_over = ros::Time::now().toSec();
+            cout << "over-recieve: " << 1000 * (img_over - img_recieve) << " ms" << endl;*/
+            // t = vpTime::measureTimeMs() - t;
+            // time_vec.push_back(t);
             if (cMo_vec.size() != 0)
             {
-                pixel_vec = detector.getPolygon(0);
                 pose_matrix = cMo_vec[0];
-                vpDisplay::displayFrame(I, cMo_vec[0], cam, tagSize / 2, vpColor::none, 3);
-                for (size_t i = 0; i < pixel_vec.size(); i++)
-                {
-                    vpDisplay::displayCross(I, pixel_vec[i], 14, vpColor::red, 3);
-                    std::ostringstream number;
-                    number << i + 1;
-                    vpDisplay::displayText(I, pixel_vec[i] + vpImagePoint(15, 5), number.str(), vpColor::blue);
-                }
-                ros_ibvs_msg.data[0] = pixel_vec[0].get_u();
-                ros_ibvs_msg.data[1] = pixel_vec[0].get_v();
-                ros_ibvs_msg.data[2] = pixel_vec[1].get_u();
-                ros_ibvs_msg.data[3] = pixel_vec[1].get_v();
-                ros_ibvs_msg.data[4] = pixel_vec[2].get_u();
-                ros_ibvs_msg.data[5] = pixel_vec[2].get_v();
-                ros_ibvs_msg.data[6] = pixel_vec[3].get_u();
-                ros_ibvs_msg.data[7] = pixel_vec[3].get_v();
                 ros_pbvs_msg.data[0] = pose_matrix[0][3];
                 ros_pbvs_msg.data[1] = pose_matrix[1][3];
                 ros_pbvs_msg.data[2] = pose_matrix[2][3];
                 ros_pbvs_msg.data[3] = 1;
+                ros_pbvs_msg.data[4] = image_time;
             }
             else
             {
                 ros_pbvs_msg.data[3] = 0;
+                ros_pbvs_msg.data[4] = image_time;
             }
-            vpDisplay::flush(I);
+            // vpDisplay::flush(I);
             if (vpDisplay::getClick(I, false))
                 break;
+            // double img_before_pub = ros::Time::now().toSec();
+            if (24000 - 1000000 * (ros::Time::now().toSec() - img_recieve) > 0)
+            {
+                usleep(double(25000) - 1000000 * (ros::Time::now().toSec() - img_recieve));
+            }
             pbvs_publisher.publish(ros_pbvs_msg);
-            ibvs_publisher.publish(ros_ibvs_msg);
+            rate2.sleep();
+            /*double img_send = ros::Time::now().toSec();
+            cout << "send-recieve: " << 1000 * (img_send - img_recieve) << " ms" << endl;*/
         }
         std::cout << "Benchmark computation time" << std::endl;
         std::cout << "Mean / Median / Std: " << vpMath::getMean(time_vec) << " ms"

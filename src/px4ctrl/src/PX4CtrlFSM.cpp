@@ -4,7 +4,7 @@
 using namespace std;
 using namespace uav_utils;
 
-PX4CtrlFSM::PX4CtrlFSM(Parameter_t &param_, LinearControl &controller_) : param(param_), nh("~"), loss_target_time_count(0), controller(controller_) /*, thrust_curve(thrust_curve_)*/
+PX4CtrlFSM::PX4CtrlFSM(Parameter_t &param_, LinearControl &controller_) : param(param_), nh("~"), loss_target_time_count(15), controller(controller_) /*, thrust_curve(thrust_curve_)*/
 {
 	state = MANUAL_CTRL;
 	hover_pose.setZero();
@@ -40,6 +40,7 @@ void PX4CtrlFSM::process()
 {
 	ros::Time now_time = ros::Time::now();
 	Controller_Output_t u;
+	u.thrust = 0;
 	Desired_State_t des(odom_data); // des代表了当前的无人机位姿，利用初始化函数读取里程计信息来给其赋值
 
 	// STEP1: state machine runs
@@ -117,7 +118,7 @@ void PX4CtrlFSM::process()
 			toggle_offboard_mode(false);
 			ROS_WARN("[px4ctrl] From CMD_CTRL(L3) to MANUAL_CTRL(L1)!");
 		}
-		else if (!rc_data.is_command_mode || !cmd_is_received(now_time) || loss_target_time_count > 7)
+		else if (!rc_data.is_command_mode || !cmd_is_received(now_time) || loss_target_time_count > 3)
 		{
 			state = AUTO_HOVER;
 			set_hov_with_odom();
@@ -172,25 +173,9 @@ void PX4CtrlFSM::process()
 	}
 
 	// STEP4: solve and update new control commands
-	if (state == CMD_CTRL)
-	{
-		bool is_cmd_mode = true;
-		Odom_Data_t odom_zero;
-		odom_zero.p = Eigen::Vector3d::Zero();
-		odom_zero.v = Eigen::Vector3d::Zero();
-		odom_zero.q = odom_data.q;
-		odom_zero.w = odom_data.w;
-		debug_msg = controller.calculateControl(des, odom_zero, imu_data, u, is_cmd_mode);
-		debug_msg.header.stamp = now_time;
-		debug_pub.publish(debug_msg);
-	}
-	else
-	{
-		bool is_cmd_mode = false;
-		debug_msg = controller.calculateControl(des, odom_data, imu_data, u, is_cmd_mode);
-		debug_msg.header.stamp = now_time;
-		debug_pub.publish(debug_msg);
-	}
+	debug_msg = controller.calculateControl(des, odom_data, imu_data, u, static_cast<int>(state));
+	debug_msg.header.stamp = now_time;
+	debug_pub.publish(debug_msg);
 
 	// STEP5: publish control commands to mavros
 	publish_acceleration_ctrl(u, now_time);
@@ -208,6 +193,7 @@ void PX4CtrlFSM::process()
 
 	// STEP8: publish the current state of state machine
 	publish_state();
+	// cout << loss_target_time_count << endl;
 }
 
 void PX4CtrlFSM::loss_target_callback(const std_msgs::Float64MultiArray::ConstPtr &msg)
@@ -358,68 +344,18 @@ bool PX4CtrlFSM::recv_new_odom()
 
 void PX4CtrlFSM::publish_acceleration_ctrl(const Controller_Output_t &u, const ros::Time &stamp) // 发送姿态和力矩指令
 {
-	/*if (get_landed())
-	{
-		mavros_msgs::PositionTarget msg;
-		msg.header.stamp = ros::Time::now();
-		msg.coordinate_frame = mavros_msgs::PositionTarget::FRAME_LOCAL_NED;
-		msg.type_mask = mavros_msgs::PositionTarget::IGNORE_PX |
-						mavros_msgs::PositionTarget::IGNORE_PY |
-						mavros_msgs::PositionTarget::IGNORE_PZ |
-						mavros_msgs::PositionTarget::IGNORE_AFX |
-						mavros_msgs::PositionTarget::IGNORE_AFY |
-						mavros_msgs::PositionTarget::IGNORE_AFZ |
-						mavros_msgs::PositionTarget::IGNORE_YAW |
-						mavros_msgs::PositionTarget::IGNORE_YAW_RATE;
-		// 设置你想要的加速度值
-		msg.velocity.x = u.acc_world[0]; // X轴速度
-		msg.velocity.y = u.acc_world[1]; // Y轴速度
-		msg.velocity.z = u.acc_world[2];
-		// Z轴加速度
-		// cout << u.acc_world[2] << endl;
-		// 设置偏航角（以弧度为单位）
-		// msg.yaw = u.des_yaw; // 偏航角，例如，1.57弧度约等于90度
-		ctrl_FCU_pub.publish(msg);
-	}
-	else
-	{*/
 	mavros_msgs::AttitudeTarget msg;
-
 	msg.header.stamp = stamp;
 	msg.header.frame_id = std::string("FCU");
-
 	msg.type_mask = mavros_msgs::AttitudeTarget::IGNORE_ROLL_RATE |
 					mavros_msgs::AttitudeTarget::IGNORE_PITCH_RATE |
 					mavros_msgs::AttitudeTarget::IGNORE_YAW_RATE;
-
 	msg.orientation.x = u.q.x();
 	msg.orientation.y = u.q.y();
 	msg.orientation.z = u.q.z();
 	msg.orientation.w = u.q.w();
-
 	msg.thrust = u.thrust;
-
 	ctrl_FCU_pub.publish(msg);
-
-	/*mavros_msgs::PositionTarget msg;
-	msg.header.stamp = ros::Time::now();
-	msg.coordinate_frame = mavros_msgs::PositionTarget::FRAME_LOCAL_NED;
-	msg.type_mask = mavros_msgs::PositionTarget::IGNORE_PX |
-					mavros_msgs::PositionTarget::IGNORE_PY |
-					mavros_msgs::PositionTarget::IGNORE_PZ |
-					mavros_msgs::PositionTarget::IGNORE_AFX |
-					mavros_msgs::PositionTarget::IGNORE_AFY |
-					mavros_msgs::PositionTarget::IGNORE_AFZ |
-					mavros_msgs::PositionTarget::IGNORE_YAW_RATE;
-	// 设置你想要的加速度值
-	msg.velocity.x = u.acc_world[0]; // X轴加速度
-	msg.velocity.y = u.acc_world[1]; // Y轴加速度
-	msg.velocity.z = u.acc_world[2];
-	// Z轴加速度
-	// cout << u.acc_world[2] << endl;
-	// 设置偏航角（以弧度为单位）
-	msg.yaw = u.des_yaw; // 偏航角，例如，1.57弧度约等于90度
-	ctrl_FCU_pub.publish(msg);*/
 }
 
 void PX4CtrlFSM::publish_trigger(const nav_msgs::Odometry &odom_msg)

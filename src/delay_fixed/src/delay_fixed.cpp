@@ -1,6 +1,6 @@
 #include <ros/ros.h>
 #include <std_msgs/Float64MultiArray.h>
-
+using namespace std;
 class DelayFixer
 {
 private:
@@ -15,27 +15,28 @@ public:
     {
         sub = nh.subscribe("/point_with_unfixed_delay", 1, &DelayFixer::Callback, this);
         pub = nh.advertise<std_msgs::Float64MultiArray>("/delay_sent_50ms", 1);
-        timer = nh.createTimer(ros::Duration(0.05), &DelayFixer::point_pub, this);
+        // timer = nh.createTimer(ros::Duration(0.05), &DelayFixer::point_pub, this);
     }
 
     void Callback(const std_msgs::Float64MultiArray::ConstPtr &msg)
     {
         vec.data.clear();
         vec.data = msg->data;
+        pub.publish(vec);
+        // cout << "pub spent: " << 1000 * (ros::Time::now().toSec() - vec.data[3]) << " ms" << endl;
     }
 
     void point_pub(const ros::TimerEvent &)
     {
-        pub.publish(vec);
+        // cout << "Time spent: " << 1000 * (ros::Time::now().toSec() - vec.data[3]) << " ms" << endl;
+        // pub.publish(vec);
     }
 
     void spin()
     {
-        ros::Rate rate(100);
         while (ros::ok())
         {
-            ros::spinOnce();
-            rate.sleep();
+            ros::spin();
         }
     }
 };

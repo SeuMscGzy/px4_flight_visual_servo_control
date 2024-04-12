@@ -40,6 +40,13 @@ int main(int argc, char *argv[])
                                          ros::VoidConstPtr(),
                                          ros::TransportHints().tcpNoDelay());
 
+    ros::Subscriber odom_mavros_sub =
+        nh.subscribe<nav_msgs::Odometry>("/mavros/local_position/odom",
+                                         100,
+                                         boost::bind(&Odom_Data_t::feed, &fsm.odom_data_mavros, _1),
+                                         ros::VoidConstPtr(),
+                                         ros::TransportHints().tcpNoDelay());
+
     ros::Subscriber cmd_sub =
         nh.subscribe<quadrotor_msgs::PositionCommand>("/acc_cmd",
                                                       100,
@@ -78,15 +85,15 @@ int main(int argc, char *argv[])
 
     ros::Subscriber loss_target_sub =
         nh.subscribe<std_msgs::Float64MultiArray>("/point_with_unfixed_delay",
-                                                  100,
+                                                  1,
                                                   boost::bind(&PX4CtrlFSM::loss_target_callback, &fsm, _1),
                                                   ros::VoidConstPtr(),
                                                   ros::TransportHints().tcpNoDelay());
 
+    // fsm.ctrl_FCU_pub = nh.advertise<mavros_msgs::PositionTarget>("/mavros/setpoint_raw/local", 0);
     fsm.ctrl_FCU_pub = nh.advertise<mavros_msgs::AttitudeTarget>("/mavros/setpoint_raw/attitude", 1);
-    // fsm.ctrl_FCU_pub_land = nh.advertise<mavros_msgs::AttitudeTarget>("/mavros/setpoint_raw/attitude", 1);
     fsm.traj_start_trigger_pub = nh.advertise<geometry_msgs::PoseStamped>("/traj_start_trigger", 10);
-    fsm.state_pub = nh.advertise<std_msgs::Int32>("/px4_state_pub", 10);
+    fsm.state_pub = nh.advertise<std_msgs::Int32>("/px4_state_pub", 1);
     fsm.debug_pub = nh.advertise<quadrotor_msgs::Px4ctrlDebug>("/debugPx4ctrl", 10); // debug
 
     fsm.set_FCU_mode_srv = nh.serviceClient<mavros_msgs::SetMode>("/mavros/set_mode");
