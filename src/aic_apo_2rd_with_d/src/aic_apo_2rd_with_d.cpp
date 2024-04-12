@@ -19,14 +19,14 @@ using namespace std;
 class AIC2Controller
 {
 private:
-    const double e_1 = 1.5;
-    const double e_2 = 1.5;
+    const double e_1 = 1;
+    const double e_2 = 1;
     const double k_l = 1.0;
     const double sigma_z1_inv = 0.5;
     const double sigma_z2_inv = 0.5;
     const double sigma_w1_inv = 1.0;
     const double sigma_w2_inv = 1.0;
-    /*    const double k_i = -5;
+    /*const double k_i = -5;
     const double k_p = -3.7;
     const double k_d = -4;*/
     const double k_i = -5.2;
@@ -43,7 +43,7 @@ private:
     std::vector<double> trust_array_y2 = {0.5, 0.5, 0.5, 0.5, 0.5};
 
 public:
-    double adjustBias(double value, int which_axis, bool use_bias)
+    double adjustBias(double value, int which_axis, bool use_bias) // which_axis: 0 for x, 1 for y, 2 for z
     {
         if (use_bias)
         {
@@ -67,7 +67,7 @@ public:
     }
     double limitControl(double controlValue, int which_axis)
     {
-        double limit = (which_axis != 2) ? 2 : 4; // Limit is 0.5 for x and y, 1.0 for z axis.
+        double limit = (which_axis != 2) ? 3 : 4; // Limit is 3 for x and y, 4 for z axis.
         if (abs(controlValue) >= limit)
         {
             controlValue = limit * controlValue / abs(controlValue); // Apply limit
@@ -76,13 +76,14 @@ public:
     }
     double limitIntegral(double IntegralValue, int which_axis)
     {
-        double limit = (which_axis != 2) ? 1 : 2; // Limit is 0.5 for x and y, 1.0 for z axis.
+        double limit = (which_axis != 2) ? 1.5 : 2; // Limit is 1.5 for x and y, 2 for z axis.
         if (abs(IntegralValue) >= limit)
         {
             IntegralValue = limit * IntegralValue / abs(IntegralValue); // Apply limit
         }
         return IntegralValue;
     }
+
     void computeControl(int time_count, double y1_real_slow, double y1_APO_fast, double y2_derivative_sampling, double y2_APO_fast, double &mu_last, double &mu_p_last, double &u_last, std::atomic<double> &u, double &integral_error, double &mu, double &mu_p, bool use_bias, int which_axis)
     {
         /*if (!use_y1_real)
@@ -134,8 +135,6 @@ public:
         y1_real_bias = adjustBias(y1_real_slow, which_axis, use_bias);
         double trust_param_y1 = trust_array_y1[time_count];
         double trust_param_y2 = trust_array_y2[time_count];
-        // if (which_axis != 2)
-        //{
         mu = double(mu_last + T_c * (mu_p_last + (1 - trust_param_y1) * k_l * sigma_z1_inv * (y1_APO_fast_bias - mu_last) + trust_param_y1 * k_l * sigma_z1_inv * (y1_real_bias - mu_last) - k_l * sigma_w1_inv * e_1 * (mu_p_last + e_1 * mu_last)));
         mu_p = double(mu_p_last + T_c * ((1 - trust_param_y2) * k_l * sigma_z2_inv * (y2_APO_fast - mu_p_last) + trust_param_y2 * k_l * sigma_z2_inv * (y2_derivative_sampling - mu_p_last) - k_l * sigma_w1_inv * (mu_p_last + e_1 * mu_last) - k_l * sigma_w2_inv * e_2 * e_2 * mu_p_last));
         mu_last = mu;
@@ -145,15 +144,6 @@ public:
         u_last = limitIntegral(u_last, which_axis);
         u = u - k_d * (1 - trust_param_y2) * y2_APO_fast - k_d * trust_param_y2 * y2_derivative_sampling;
         u = limitControl(u, which_axis);
-        //}
-        /*else
-        {
-            integral_error = integral_error + dt * y1_real_bias;
-            integral_error = limitIntegral(integral_error, which_axis);
-            u = 0.2 * integral_error + 7 * y1_real_bias + 3.2 * ((1 - trust_param_y2) * y2_APO_fast + trust_param_y2 * y2_derivative_sampling);
-            u = limitControl(u, which_axis);
-            u_last = u;
-        }*/
     }
 };
 
@@ -337,7 +327,6 @@ public:
             predict_y = y_real;
             hat_x(0) = y_real;
             aic2controller.computeControl(timer_count, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, integral_error, mu, mu_p, use_bias, which_axis);
-            // u = 0;
         }
         else
         {
@@ -346,16 +335,13 @@ public:
                 predict_y = y_real;
                 hat_x = A_bar * hat_x_last + B_bar * u + C_bar * predict_y;
                 aic2controller.computeControl(timer_count, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, integral_error, mu, mu_p, use_bias, which_axis);
-                // u = 0;
             }
             else
             {
                 Eigen::Vector2d coeff(1, 0);
                 predict_y = coeff.transpose() * (A0 * hat_x_last + B_bar * u);
-                // predict_y = hat_x(0);
                 hat_x = A_bar * hat_x_last + B_bar * u + C_bar * predict_y;
                 aic2controller.computeControl(timer_count, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, integral_error, mu, mu_p, use_bias, which_axis);
-                // u = 0;
             }
         }
         // Update last values for the next iteration
@@ -373,8 +359,6 @@ public:
             mu_p = 0;
             mu_last = 0;
             mu_p_last = 0;
-            // hat_x.setZero();
-            // hat_x_last.setZero();
         }
     }
 };

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(img_flip)
+project(img_detect_downward_cam)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -11,10 +11,10 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
-  sensor_msgs 
-  cv_bridge 
+  cv_bridge
   image_transport
 )
+find_package(VISP REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -107,7 +107,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES img_flip
+#  LIBRARIES img_detect_downward_cam
 #  CATKIN_DEPENDS roscpp rospy std_msgs
 #  DEPENDS system_lib
 )
@@ -125,7 +125,7 @@ include_directories(
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/img_flip.cpp
+#   src/${PROJECT_NAME}/img_detect_downward_cam.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -136,7 +136,7 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(img_flip src/img_flip.cpp)
+add_executable(img_detect_downward_cam src/img_detect_downward_cam.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -149,10 +149,12 @@ add_executable(img_flip src/img_flip.cpp)
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
- target_link_libraries(img_flip
+target_link_libraries(img_detect_downward_cam
    ${catkin_LIBRARIES}
  )
-
+ target_link_libraries(img_detect_downward_cam
+ ${VISP_LIBRARIES} 
+)
 #############
 ## Install ##
 #############
@@ -200,7 +202,7 @@ add_executable(img_flip src/img_flip.cpp)
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_img_flip.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_img_detect_downward_cam.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()
