@@ -10,8 +10,8 @@
 #include <nav_msgs/Path.h>
 #include <std_msgs/Float64MultiArray.h>
 using namespace std;
-double data1[] = {0.00917017725212349, 0.04114404869622912, 0.9991111425192145,
-                  -0.9999568088779205, 0.0018887851387182075, 0.009100157657364216, -0.0015126889481200667, -0.9991514398466257, 0.04115959213311221};
+double data1[] = {0.003998954650746039, -0.03120742319497377, 0.9995049300024641,
+                  -0.9999629576230795, 0.0074933480375017625, 0.0042347511015314865, -0.0076217939754581465, -0.9994848405417254, -0.031176301638856818};
 class AprilTagDetector
 {
 private:
@@ -24,7 +24,7 @@ private:
     cv::Mat Position_before = cv::Mat::zeros(3, 1, CV_64F);
     cv::Mat Position_after = cv::Mat::zeros(3, 1, CV_64F);
     cv::Mat R = cv::Mat::eye(3, 3, CV_64F);
-    
+
 public:
     AprilTagDetector()
     {
@@ -32,7 +32,7 @@ public:
         R = tempMat;
         image_sub_ = nh_.subscribe("/object_pose", 1, &AprilTagDetector::imageCb, this);
         odom_sub_ = nh_.subscribe("/vins_fusion/imu_propagate", 1, &AprilTagDetector::odomCallback, this);
-        point_pub_ = nh_.advertise<std_msgs::Float64MultiArray>("/point_with_unfixed_delay", 1);
+        point_pub_ = nh_.advertise<std_msgs::Float64MultiArray>("/point_with_fixed_delay", 1);
     }
 
     ~AprilTagDetector()
@@ -56,12 +56,8 @@ public:
             msg->pose.pose.orientation.w);
         tf::Matrix3x3 rot_matrix1(q1);
         tf::Matrix3x3 rot_matrix2(0.003998954650746039, -0.03120742319497377, 0.9995049300024641,
-                                  -0.9999629576230795, 0.0074933480375017625, 0.0042347511015314865, -0.0076217939754581465, -0.9994848405417254, -0.031176301638856818);
-        // 这是加入底部相机的旋转矩阵，两个相机之间朝向的粗标定。
-        // tf::Matrix3x3 rot_matrix3(1, 0, 0,
-        //                         0, 0, 1, 0, -1, 0);
-        // 直接计算从世界到相机的旋转矩阵，避免了多次不必要的求逆操作,面向前方的相机使用12旋转矩阵即可，底部相机加入旋转矩阵3。
-        tf::Matrix3x3 rot_matrix_cam_to_world = rot_matrix1 * rot_matrix2; //* rot_matrix3;
+                                  -0.9999629576230795, 0.0074933480375017625, 0.0042347511015314865, -0.0076217939754581465, -0.9994848405417254, -0.031176301638856818); // 前部相机与imu的旋转关系
+        tf::Matrix3x3 rot_matrix_cam_to_world = rot_matrix1 * rot_matrix2;
 
         for (int i = 0; i < 3; i++)
         {

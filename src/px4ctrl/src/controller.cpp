@@ -91,7 +91,6 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
       des_acc[0] = velocity_controller_x.update(desire_v_x - odom.v[0]);
       des_acc[1] = velocity_controller_y.update(desire_v_y - odom.v[1]);
       des_acc[2] = velocity_controller_z.update(desire_v_z - odom.v[2]);
-      // des_acc = Kv.asDiagonal() * (des.v - odom.v) + Kp.asDiagonal() * (des.p - odom.p);
       last_des_acc = des_acc;
     }
     else
@@ -140,7 +139,6 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   }
   if ((state_count != 3 && des.p[2] < -0.2 && odom.p[2] < 0.1 && des_acc[2] < param_.gra) || enter_count < 200) // 在地上或快降落到地上且推杆在底部或中部且为auto_hover模式
   {
-    // cout << "here" << endl;
     // cout << odom.p[2] << endl;
     // cout << des_acc[2] << endl;
     in_the_slow_thrust = true;
@@ -149,7 +147,6 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
     {
       enter_count = 200;
     }
-    // cout << "enter_count" << enter_count << endl;
     last_thrust *= 0.995;
     if (last_thrust < 0.01)
     {
@@ -163,31 +160,26 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   }
   if (last_in_the_slow_thrust == true && in_the_slow_thrust == false && state_count != 3) // 缓慢加速起飞
   {
-    // cout << "here2" << endl;
     takeoff_count = 0;
   }
   if (takeoff_count < 500)
   {
-    // cout << "takeoff_count" << takeoff_count << endl;
-    // cout << "here3" << endl;
     takeoff_count++;
     u.thrust = u.thrust * takeoff_count * 0.01 * 0.2; // 从百分之1逐渐加速到百分之百的推力
     velocity_controller_x.init();
     velocity_controller_y.init();
     velocity_controller_z.init();
   }
-  // cout << "in_the_slow_thrust" << in_the_slow_thrust << endl;
   last_in_the_slow_thrust = in_the_slow_thrust;
   last_state_count = state_count;
   last_thrust = u.thrust;
-  double roll, pitch, yaw_imu;
+  double roll, pitch;
   double yaw_odom = fromQuaternion2yaw(odom.q);
   double sin = std::sin(yaw_odom);
   double cos = std::cos(yaw_odom);
   roll = (des_acc(0) * sin - des_acc(1) * cos) / param_.gra;
   pitch = (des_acc(0) * cos + des_acc(1) * sin) / param_.gra;
   // yaw = fromQuaternion2yaw(des.q);
-  yaw_imu = fromQuaternion2yaw(imu.q);
   Eigen::Quaterniond q_des = Eigen::AngleAxisd(des.yaw, Eigen::Vector3d::UnitZ()) * Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()) * Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX());
   u.q = imu.q * odom.q.inverse() * q_des;
   // Eigen::Vector3d euler_angles = q_des.toRotationMatrix().eulerAngles(0, 1, 2);
@@ -199,10 +191,10 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
     // cout << "Euler angles_FGao (Roll, Pitch, Yaw): " << roll << " " << pitch << " " << des.yaw << endl;
 
     // 打印还原的欧拉角（偏航、俯仰、翻滚），注意这里的顺序和原始顺序相反，因为eulerAngles方法的参数是旋转的应用顺序，而不是定义顺序
-    //Eigen::Quaterniond q_rel = q_des * q_des_se3.inverse();
+    // Eigen::Quaterniond q_rel = q_des * q_des_se3.inverse();
 
     // 将相对旋转四元数转换为角轴表示
-    //Eigen::AngleAxisd angleAxis(q_rel);
+    // Eigen::AngleAxisd angleAxis(q_rel);
 
     // 输出旋转角度（弧度）和旋转轴
     // std::cout << "Rotation angle (radians): " << angleAxis.angle() << std::endl;

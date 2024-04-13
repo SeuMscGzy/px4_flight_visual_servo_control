@@ -84,7 +84,7 @@ int main(int argc, char *argv[])
                                                   ros::TransportHints().tcpNoDelay());
 
     ros::Subscriber loss_target_sub =
-        nh.subscribe<std_msgs::Float64MultiArray>("/point_with_unfixed_delay",
+        nh.subscribe<std_msgs::Float64MultiArray>("/point_with_fixed_delay",
                                                   1,
                                                   boost::bind(&PX4CtrlFSM::loss_target_callback, &fsm, _1),
                                                   ros::VoidConstPtr(),

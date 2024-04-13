@@ -185,11 +185,12 @@ public:
     {
         double ita = 1.0 / tan(M_PI * fc / fs);
         double q = sqrt(2.0);
-        a0 = 1.0 / (1.0 + q * ita + ita * ita);
-        a1 = 2 * a0;
-        a2 = a0;
-        b1 = 2.0 * a0 * (1 - ita * ita);
-        b2 = a0 * (1 - q * ita + ita * ita);
+        double a0_temp = 1.0 / (1.0 + q * ita + ita * ita);
+        a0 = a0_temp;
+        a1 = 2 * a0_temp;
+        a2 = a0_temp;
+        b1 = 2.0 * a0_temp * (1 - ita * ita);
+        b2 = a0_temp * (1 - q * ita + ita * ita);
     }
 
     double filter(double input)
@@ -381,7 +382,7 @@ public:
     TripleAxisController()
         : nh("~")
     {
-        sub = nh.subscribe("/point_with_unfixed_delay", 1, &TripleAxisController::callback, this);
+        sub = nh.subscribe("/point_with_fixed_delay", 1, &TripleAxisController::callback, this);
         ground_truth_sub = nh.subscribe("/mavros/local_position/velocity_local", 10, &TripleAxisController::ground_truth_callback, this);
         ground_truth_pose_sub = nh.subscribe("/vrpn_client_node/MCServer/5/pose", 10, &TripleAxisController::ground_truth_pose_callback, this);
         pub_hat_x = nh.advertise<std_msgs::Float64MultiArray>("/hat_x_topic", 100);
