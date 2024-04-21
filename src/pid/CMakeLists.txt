@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(visp_apriltah_detect)
+project(pid)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -11,12 +11,25 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
-  image_transport
-  cv_bridge
+  px4ctrl
+  quadrotor_msgs
+  uav_utils
+  pluginlib
+)
+find_package(Eigen3 REQUIRED) 
+## System dependencies are found with CMake's conventions
+# find_package(Boost REQUIRED COMPONENTS system)
+catkin_package(
+  CATKIN_DEPENDS roscpp rospy std_msgs px4ctrl quadrotor_msgs uav_utils
 )
 
-find_package(VISP REQUIRED)
-find_package(Eigen3 REQUIRED) 
+include_directories(
+  ${catkin_INCLUDE_DIRS}
+  ${EIGEN_INCLUDE_DIRS}
+  include/${PROJECT_NAME}
+  include
+)
+
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -108,7 +121,7 @@ find_package(Eigen3 REQUIRED)
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES visp_apriltah_detect
+#  LIBRARIES pid
 #  CATKIN_DEPENDS roscpp rospy std_msgs
 #  DEPENDS system_lib
 )
@@ -121,13 +134,12 @@ catkin_package(
 ## Your package locations should be listed before other locations
 include_directories(
 # include
-${EIGEN_INCLUDE_DIRS}
   ${catkin_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/visp_apriltah_detect.cpp
+#   src/${PROJECT_NAME}/pid.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -138,7 +150,7 @@ ${EIGEN_INCLUDE_DIRS}
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(apriltag_detect src/apriltag_detect.cpp)
+add_executable(pid src/pid.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -151,12 +163,9 @@ add_executable(apriltag_detect src/apriltag_detect.cpp)
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(apriltag_detect
-  ${catkin_LIBRARIES} 
+target_link_libraries(pid
+   ${catkin_LIBRARIES}
  )
- target_link_libraries(apriltag_detect
- ${VISP_LIBRARIES} 
-)
 
 #############
 ## Install ##
@@ -205,7 +214,7 @@ target_link_libraries(apriltag_detect
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_visp_apriltah_detect.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_pid.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()

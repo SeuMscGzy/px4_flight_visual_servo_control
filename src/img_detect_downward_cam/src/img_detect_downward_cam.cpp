@@ -15,13 +15,18 @@
 #include <sensor_msgs/image_encodings.h>
 #include <visp3/core/vpImageTools.h>
 using namespace std;
-vpImage<unsigned char> I;
+vpImage<unsigned char> I(480, 640); // 使用实际的高度和宽度初始化
 void imageCallback(const sensor_msgs::ImageConstPtr &msg)
 {
     try
     {
+        // cout << "here" << endl;
         cv_bridge::CvImageConstPtr cv_ptr;
         cv_ptr = cv_bridge::toCvShare(msg, sensor_msgs::image_encodings::MONO8);
+        if (I.getWidth() == 0 || I.getHeight() == 0)
+        {
+            I.resize(cv_ptr->image.rows, cv_ptr->image.cols); // 根据实际接收到的图像尺寸调整大小
+        }
         vpImageConvert::convert(cv_ptr->image, I);
     }
     catch (cv_bridge::Exception &e)
@@ -30,14 +35,18 @@ void imageCallback(const sensor_msgs::ImageConstPtr &msg)
         return;
     }
 }
+
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "object_detector");
     ros::NodeHandle nh;
     ros::Publisher pbvs_publisher = nh.advertise<std_msgs::Float64MultiArray>("/object_pose", 1);
-    ros::Subscriber imgsub = nh.subscribe("/image", 1, imageCallback);
+    ros::Publisher R_publisher = nh.advertise<std_msgs::Float64MultiArray>("/R_data", 1);
+    ros::Subscriber imgsub = nh.subscribe("/usb_cam/image_raw", 1, imageCallback);
     std_msgs::Float64MultiArray ros_pbvs_msg;
     ros_pbvs_msg.data.resize(6, 0.0);
+    std_msgs::Float64MultiArray R_msg;
+    R_msg.data.resize(9);
     int opt_device = 0; // For OpenCV and V4l2 grabber to set the camera device
     vpDetectorAprilTag::vpAprilTagFamily tagFamily = vpDetectorAprilTag::TAG_36h11;
     vpDetectorAprilTag::vpPoseEstimationMethod poseEstimationMethod = vpDetectorAprilTag::HOMOGRAPHY_VIRTUAL_VS;
@@ -126,73 +135,89 @@ int main(int argc, char **argv)
             return EXIT_SUCCESS;
         }
     }
-    try
+    vpCameraParameters cam;
+    cam.initPersProjWithoutDistortion(553.4990128286441, 558.3235220162396, 345.1845600341376, 252.59744852030374);
+    vpXmlParserCamera parser;
+    if (!intrinsic_file.empty() && !camera_name.empty())
+        parser.parse(cam, intrinsic_file, camera_name, vpCameraParameters::perspectiveProjWithoutDistortion);
+    std::cout << cam << std::endl;
+    std::cout << "poseEstimationMethod: " << poseEstimationMethod << std::endl;
+    std::cout << "tagFamily: " << tagFamily << std::endl;
+    std::cout << "nThreads : " << nThreads << std::endl;
+    std::cout << "Z aligned: " << align_frame << std::endl;
+    vpDisplay *d = NULL;
+    if (!display_off)
     {
-        vpCameraParameters cam;
-        cam.initPersProjWithoutDistortion(615.1674805, 615.1675415, 312.1889954, 243.4373779);
-        vpXmlParserCamera parser;
-        if (!intrinsic_file.empty() && !camera_name.empty())
-            parser.parse(cam, intrinsic_file, camera_name, vpCameraParameters::perspectiveProjWithoutDistortion);
-        std::cout << cam << std::endl;
-        std::cout << "poseEstimationMethod: " << poseEstimationMethod << std::endl;
-        std::cout << "tagFamily: " << tagFamily << std::endl;
-        std::cout << "nThreads : " << nThreads << std::endl;
-        std::cout << "Z aligned: " << align_frame << std::endl;
-        vpDisplay *d = NULL;
-        if (!display_off)
-        {
-            d = new vpDisplayX(I);
-        }
-        vpDetectorAprilTag detector(tagFamily);
-        detector.setAprilTagQuadDecimate(quad_decimate);
-        detector.setAprilTagPoseEstimationMethod(poseEstimationMethod);
-        detector.setAprilTagNbThreads(nThreads);
-        detector.setDisplayTag(display_tag, color_id < 0 ? vpColor::none : vpColor::getColor(color_id), thickness);
-        detector.setZAlignedWithCameraAxis(align_frame);
-        ros::Rate rate2(20);
-        while (ros::ok())
-        {
-            double img_recieve = ros::Time::now().toSec();
-            double image_time = ros::Time::now().toSec();
-            // vpDisplay::display(I);
-            std::vector<vpHomogeneousMatrix> cMo_vec;
-            vpHomogeneousMatrix pose_matrix;
-            detector.detect(I, tagSize, cam, cMo_vec);
-            /*double img_over = ros::Time::now().toSec();
-            cout << "over-recieve: " << 1000 * (img_over - img_recieve) << " ms" << endl;*/
-            if (cMo_vec.size() != 0)
-            {
-                pose_matrix = cMo_vec[0];
-                ros_pbvs_msg.data[0] = pose_matrix[0][3];
-                ros_pbvs_msg.data[1] = pose_matrix[1][3];
-                ros_pbvs_msg.data[2] = pose_matrix[2][3];
-                ros_pbvs_msg.data[3] = 1;
-                ros_pbvs_msg.data[4] = image_time;
-            }
-            else
-            {
-                ros_pbvs_msg.data[3] = 0;
-                ros_pbvs_msg.data[4] = image_time;
-            }
-            // vpDisplay::flush(I);
-            if (vpDisplay::getClick(I, false))
-                break;
-            // double img_before_pub = ros::Time::now().toSec();
-            if (24000 - 1000000 * (ros::Time::now().toSec() - img_recieve) > 0)
-            {
-                usleep(double(25000) - 1000000 * (ros::Time::now().toSec() - img_recieve));
-            }
-            pbvs_publisher.publish(ros_pbvs_msg);
-            rate2.sleep();
-            /*double img_send = ros::Time::now().toSec();
-            cout << "send-recieve: " << 1000 * (img_send - img_recieve) << " ms" << endl;*/
-        }
-        if (!display_off)
-            delete d;
+        d = new vpDisplayX(I);
     }
-    catch (const vpException &e)
+    vpDetectorAprilTag detector(tagFamily);
+    detector.setAprilTagQuadDecimate(quad_decimate);
+    detector.setAprilTagPoseEstimationMethod(poseEstimationMethod);
+    detector.setAprilTagNbThreads(nThreads);
+    detector.setDisplayTag(display_tag, color_id < 0 ? vpColor::none : vpColor::getColor(color_id), thickness);
+    detector.setZAlignedWithCameraAxis(align_frame);
+    ros::Rate rate2(20);
+    while (ros::ok())
     {
-        std::cerr << "Catch an exception: " << e.getMessage() << std::endl;
+        ros::spinOnce();
+        double img_recieve = ros::Time::now().toSec();
+        double image_time = ros::Time::now().toSec();
+        // vpDisplay::display(I);
+        std::vector<vpHomogeneousMatrix> cMo_vec;
+        vpHomogeneousMatrix pose_matrix;
+        detector.detect(I, tagSize, cam, cMo_vec);
+        /*double img_over = ros::Time::now().toSec();
+        cout << "over-recieve: " << 1000 * (img_over - img_recieve) << " ms" << endl;*/
+        if (cMo_vec.size() != 0)
+        {
+            pose_matrix = cMo_vec[0];
+            vpRotationMatrix R;
+            pose_matrix.extract(R);
+            // Convert the rotation matrix R to a Float64MultiArray message
+            for (int i = 0; i < 3; i++)
+            {
+                for (int j = 0; j < 3; j++)
+                {
+                    R_msg.data[i * 3 + j] = R[i][j];
+                }
+            }
+            // cout << R << endl; // Rca 相机到apriltag
+            ros_pbvs_msg.data[0] = pose_matrix[0][3];
+            ros_pbvs_msg.data[1] = pose_matrix[1][3];
+            ros_pbvs_msg.data[2] = pose_matrix[2][3];
+            ros_pbvs_msg.data[3] = 1;
+            ros_pbvs_msg.data[4] = image_time;
+        }
+        else
+        {
+            R_msg.data[0] = 1;
+            R_msg.data[1] = 0;
+            R_msg.data[2] = 0;
+            R_msg.data[3] = 0;
+            R_msg.data[4] = -1;
+            R_msg.data[5] = 0;
+            R_msg.data[6] = 0;
+            R_msg.data[7] = 0;
+            R_msg.data[8] = -1;
+            ros_pbvs_msg.data[3] = 0;
+            ros_pbvs_msg.data[4] = image_time;
+        }
+        // vpDisplay::flush(I);
+        if (vpDisplay::getClick(I, false))
+            break;
+        // double img_before_pub = ros::Time::now().toSec();
+        if (24000 - 1000000 * (ros::Time::now().toSec() - img_recieve) > 0)
+        {
+            usleep(double(25000) - 1000000 * (ros::Time::now().toSec() - img_recieve));
+        }
+        pbvs_publisher.publish(ros_pbvs_msg);
+        // Publish the R message
+        R_publisher.publish(R_msg);
+        rate2.sleep();
+        /*double img_send = ros::Time::now().toSec();
+        cout << "send-recieve: " << 1000 * (img_send - img_recieve) << " ms" << endl;*/
     }
+    if (!display_off)
+        delete d;
     return EXIT_SUCCESS;
 }
