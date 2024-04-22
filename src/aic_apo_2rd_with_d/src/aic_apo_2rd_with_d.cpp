@@ -13,7 +13,7 @@
 #include <geometry_msgs/TwistStamped.h>
 #include <geometry_msgs/AccelStamped.h>
 #include <nav_msgs/Odometry.h>
-
+#include <Iir.h>
 using namespace std;
 
 class AIC2Controller
@@ -179,9 +179,11 @@ private:
     ros::NodeHandle nh;
     ros::Timer timer;
 
-    ButterworthLowPassFilter filter_for_deri; // 二阶巴特沃斯LPF
+    // ButterworthLowPassFilter filter_for_deri; // 二阶巴特沃斯LPF
     LowPassFilter filter_for_img;
     AIC2Controller aic2controller;
+    // Iir::Butterworth::LowPass<4> filter_4_for_img;
+    Iir::Butterworth::LowPass<4> filter_4_for_deri;
     ros::Subscriber px4_state_sub;
     friend class TripleAxisController;
     double loss_or_not_;
@@ -208,7 +210,7 @@ public:
           mu_p_last(0.0),
           timer_count(0),
           filter_for_img(0.9),
-          filter_for_deri(20, 3),
+          // filter_for_deri(20, 3),
           y_filtered_deri(0),
           loss_target(true),
           loss_or_not_(1),
@@ -227,6 +229,7 @@ public:
         B0 << 5.00000000000000e-05,
             0.0100000000000000;
         px4_state_sub = nh.subscribe("/px4_state_pub", 1, &MyController::StateCallback, this);
+        filter_4_for_deri.setup(20, 4);
     }
 
     void cal_single_axis_ctrl_input(double measure_single_axis, double loss_or_not, bool use_bias, int which_axis)
@@ -236,13 +239,15 @@ public:
         which_axis_ = which_axis;
         y_real = measure_single_axis;
         y_real = filter_for_img.filter(y_real);
+        // y_real = filter_4_for_img.filter(y_real);
 
         time_now = ros::Time::now().toSec();
         time_pass = time_now - time_last;
         function(loss_or_not_, use_bias_, which_axis_);
 
         y_real_derivative = (y_real - y_real_last) / time_pass; // 0.05 seconds = 50ms
-        y_filtered_deri = filter_for_deri.filter(y_real_derivative);
+        // y_filtered_deri = filter_for_deri.filter(y_real_derivative);
+        y_filtered_deri = filter_4_for_deri.filter(y_real_derivative);
 
         // Update the last values for the next iteration
         y_real_last = y_real;
@@ -435,8 +440,6 @@ public:
             ros::spin();
         }
     }
-
-    // 其他必要的方法
 };
 
 int main(int argc, char **argv)

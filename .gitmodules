@@ -1,0 +1,3 @@
+[submodule "src/aic_apo_2rd_with_d/kfr"]
+	path = src/aic_apo_2rd_with_d/kfr
+	url = https://github.com/kfrlib/kfr.git

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.0.2)
 project(aic_apo_2rd_with_d)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-# add_compile_options(-std=c++11)
+#add_compile_options(-std=c++17)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -16,19 +16,23 @@ find_package(catkin REQUIRED COMPONENTS
   uav_utils
   pluginlib
 )
+#find_package(KFR CONFIG REQUIRED)
 find_package(Eigen3 REQUIRED) 
+find_package(iir REQUIRED)
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 catkin_package(
-  CATKIN_DEPENDS roscpp rospy std_msgs px4ctrl quadrotor_msgs uav_utils
+  INCLUDE_DIRS include LIBRARIES CATKIN_DEPENDS roscpp rospy std_msgs px4ctrl quadrotor_msgs uav_utils
 )
-
+include_directories(${KFR_INCLUDE_DIRS})
 include_directories(
   ${catkin_INCLUDE_DIRS}
   ${EIGEN_INCLUDE_DIRS}
   include/${PROJECT_NAME}
   include
 )
+
+
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -128,10 +132,6 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-include_directories(
-# include
-  ${catkin_INCLUDE_DIRS}
-)
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
@@ -162,7 +162,9 @@ add_executable(aic_apo_2rd_with_d src/aic_apo_2rd_with_d.cpp)
 target_link_libraries(aic_apo_2rd_with_d
    ${catkin_LIBRARIES}
  )
+#target_link_libraries(aic_apo_2rd_with_d kfr)
 
+target_link_libraries(aic_apo_2rd_with_d iir::iir)
 #############
 ## Install ##
 #############
