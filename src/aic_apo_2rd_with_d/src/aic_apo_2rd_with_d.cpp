@@ -22,18 +22,15 @@ private:
     const double e_1 = 1;
     const double e_2 = 1;
     const double k_l = 1.0;
-    const double sigma_z1_inv = 0.5;
-    const double sigma_z2_inv = 0.5;
+    const double sigma_z1_inv = 1.0;
+    const double sigma_z2_inv = 1.0;
     const double sigma_w1_inv = 1.0;
     const double sigma_w2_inv = 1.0;
-    /*const double k_i = -5;
-    const double k_p = -3.7;
-    const double k_d = -4;*/
-    const double k_i = -5.2;
-    const double k_p = -3.7;
-    const double k_d = -3.3;
+    double k_i = -4;
+    double k_p = -5.5;
+    double k_d = -4;
     const double T_c = 0.01;
-    const double x_bias = -0.9;
+    const double x_bias = -1;
     const double y_bias = -0.2;
     const double z_bias = -0.1;
     double y1_APO_fast_bias = 0;
@@ -66,7 +63,7 @@ public:
     }
     double limitControl(double controlValue, int which_axis)
     {
-        double limit = (which_axis != 2) ? 3 : 4; // Limit is 3 for x and y, 4 for z axis.
+        double limit = (which_axis != 0) ? 3 : 3; // Limit is 3 for y and z, 1.5 for x axis.
         if (abs(controlValue) >= limit)
         {
             controlValue = limit * controlValue / abs(controlValue); // Apply limit
@@ -75,7 +72,7 @@ public:
     }
     double limitIntegral(double IntegralValue, int which_axis)
     {
-        double limit = (which_axis != 2) ? 1.5 : 2; // Limit is 1.5 for x and y, 2 for z axis.
+        double limit = (which_axis != 0) ? 1 : 1; // Limit is 1.5 for y and z, 0.75 for x axis.
         if (abs(IntegralValue) >= limit)
         {
             IntegralValue = limit * IntegralValue / abs(IntegralValue); // Apply limit
@@ -83,7 +80,7 @@ public:
         return IntegralValue;
     }
 
-    void computeControl(int time_count, double y1_real_slow, double y1_APO_fast, double y2_derivative_sampling, double y2_APO_fast, double &mu_last, double &mu_p_last, double &u_last, std::atomic<double> &u, double &mu, double &mu_p, bool use_bias, int which_axis)
+    void computeControl(int time_count, double y1_real_slow, double y1_APO_fast, double y2_derivative_sampling, double y2_APO_fast, double &mu_last, double &mu_p_last, double &u_last, double &u, double &mu, double &mu_p, bool use_bias, int which_axis)
     {
         y1_APO_fast_bias = adjustBias(y1_APO_fast, which_axis, use_bias);
         y1_real_bias = adjustBias(y1_real_slow, which_axis, use_bias);
@@ -93,11 +90,11 @@ public:
         mu_p = double(mu_p_last + T_c * ((1 - trust_param_y2) * k_l * sigma_z2_inv * (y2_APO_fast - mu_p_last) + trust_param_y2 * k_l * sigma_z2_inv * (y2_derivative_sampling - mu_p_last) - k_l * sigma_w1_inv * (mu_p_last + e_1 * mu_last) - k_l * sigma_w2_inv * e_2 * e_2 * mu_p_last));
         mu_last = mu;
         mu_p_last = mu_p;
-        u = double(u_last - T_c * (k_i * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu)) + k_p * ((1 - trust_param_y2) * (y2_APO_fast - mu_p) + trust_param_y2 * (y2_derivative_sampling - mu_p))));
-        u_last = u;
+        u_last = double(u_last - T_c * (k_i * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu)) + k_p * ((1 - trust_param_y2) * (y2_APO_fast - mu_p) + trust_param_y2 * (y2_derivative_sampling - mu_p))));
         u_last = limitIntegral(u_last, which_axis);
-        u = u - k_d * (1 - trust_param_y2) * y2_APO_fast - k_d * trust_param_y2 * y2_derivative_sampling;
+        u = u_last - k_d * (1 - trust_param_y2) * y2_APO_fast - k_d * trust_param_y2 * y2_derivative_sampling;
         u = limitControl(u, which_axis);
+        // cout << which_axis << ": " << u_last << " " << mu << " " << mu_p << " " << u << endl;
     }
 };
 
@@ -168,7 +165,7 @@ class MyController
 private:
     Eigen::Vector2d hat_x_last, hat_x, B_bar, C_bar, B0;
     Eigen::Matrix2d A_bar, A0;
-    std::atomic<double> u;
+    double u;
     double u_last;
     double predict_y, y_real, y_real_last;
     double y_real_derivative, y_filtered_deri;
@@ -180,10 +177,9 @@ private:
     ros::Timer timer;
 
     // ButterworthLowPassFilter filter_for_deri; // 二阶巴特沃斯LPF
-    LowPassFilter filter_for_img;
     AIC2Controller aic2controller;
     // Iir::Butterworth::LowPass<4> filter_4_for_img;
-    Iir::Butterworth::LowPass<4> filter_4_for_deri;
+    Iir::Butterworth::LowPass<2> filter_4_for_deri;
     ros::Subscriber px4_state_sub;
     friend class TripleAxisController;
     double loss_or_not_;
@@ -209,7 +205,6 @@ public:
           mu_last(0.0),
           mu_p_last(0.0),
           timer_count(0),
-          filter_for_img(0.9),
           // filter_for_deri(20, 3),
           y_filtered_deri(0),
           loss_target(true),
@@ -220,8 +215,8 @@ public:
     {
         A_bar << 0.518572754477203, 0.00740818220681718,
             -6.66736398613546, 0.963063686886233;
-        B_bar << 0,
-            0;
+        B_bar << 4.10403479014204e-05,
+            0.00987060308099953;
         C_bar << 0.481427245526137,
             6.66736398622287;
         A0 << 1, 0.0100000000000000,
@@ -229,7 +224,7 @@ public:
         B0 << 5.00000000000000e-05,
             0.0100000000000000;
         px4_state_sub = nh.subscribe("/px4_state_pub", 1, &MyController::StateCallback, this);
-        filter_4_for_deri.setup(20, 4);
+        filter_4_for_deri.setup(20, 2.7);
     }
 
     void cal_single_axis_ctrl_input(double measure_single_axis, double loss_or_not, bool use_bias, int which_axis)
@@ -238,8 +233,6 @@ public:
         use_bias_ = use_bias;
         which_axis_ = which_axis;
         y_real = measure_single_axis;
-        y_real = filter_for_img.filter(y_real);
-        // y_real = filter_4_for_img.filter(y_real);
 
         time_now = ros::Time::now().toSec();
         time_pass = time_now - time_last;
@@ -292,13 +285,13 @@ public:
             if (timer_count == 0)
             {
                 predict_y = y_real;
-                hat_x = A_bar * hat_x_last + B_bar * u + C_bar * predict_y;
+                hat_x = A_bar * hat_x_last + B0 * u + C_bar * predict_y;
                 aic2controller.computeControl(timer_count, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, mu, mu_p, use_bias, which_axis);
             }
             else
             {
                 Eigen::Vector2d coeff(1, 0);
-                predict_y = coeff.transpose() * (A0 * hat_x_last + B_bar * u);
+                predict_y = coeff.transpose() * (A0 * hat_x_last + B0 * u);
                 hat_x = A_bar * hat_x_last + B_bar * u + C_bar * predict_y;
                 aic2controller.computeControl(timer_count, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, mu, mu_p, use_bias, which_axis);
             }

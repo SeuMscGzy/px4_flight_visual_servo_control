@@ -29,7 +29,7 @@ include_directories(
   include/${PROJECT_NAME}
   include
 )
-
+find_package(iir REQUIRED)
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -166,7 +166,7 @@ add_executable(aic_with_d src/aic_with_d.cpp)
 target_link_libraries(aic_with_d
    ${catkin_LIBRARIES}
  )
-
+ target_link_libraries(aic_with_d iir::iir)
 #############
 ## Install ##
 #############

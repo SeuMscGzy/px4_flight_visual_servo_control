@@ -13,7 +13,9 @@
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
-#include <visp3/core/vpImageTools.h>
+#include <visp3/vision/vpPose.h>
+#include <visp3/core/vpMeterPixelConversion.h>
+#include <visp3/core/vpPoint.h>
 using namespace std;
 vpImage<unsigned char> I(480, 640); // 使用实际的高度和宽度初始化
 void imageCallback(const sensor_msgs::ImageConstPtr &msg)
@@ -50,9 +52,9 @@ int main(int argc, char **argv)
     int opt_device = 0; // For OpenCV and V4l2 grabber to set the camera device
     vpDetectorAprilTag::vpAprilTagFamily tagFamily = vpDetectorAprilTag::TAG_36h11;
     vpDetectorAprilTag::vpPoseEstimationMethod poseEstimationMethod = vpDetectorAprilTag::HOMOGRAPHY_VIRTUAL_VS;
-    double tagSize = 0.111;
+    double tagSize;
     float quad_decimate = 1.0;
-    int nThreads = 2;
+    int nThreads = 4;
     std::string intrinsic_file = "";
     std::string camera_name = "";
     bool display_tag = false;
@@ -165,9 +167,52 @@ int main(int argc, char **argv)
         // vpDisplay::display(I);
         std::vector<vpHomogeneousMatrix> cMo_vec;
         vpHomogeneousMatrix pose_matrix;
-        detector.detect(I, tagSize, cam, cMo_vec);
-        /*double img_over = ros::Time::now().toSec();
-        cout << "over-recieve: " << 1000 * (img_over - img_recieve) << " ms" << endl;*/
+        detector.detect(I);
+        std::map<int, double> tagSizes = {{0, 0.0254}, {1, 0.081}}; // 标签ID与尺寸的映射
+        std::vector<int> ids = detector.getTagsId();                // 获取标签ID
+        if (ids.size() == 0)
+        {
+            cout << "未检测到标签" << endl;
+        }
+        else if (ids.size() == 1)
+        {
+            int id = ids[0];
+            double tagSize = tagSizes[id];
+            vpHomogeneousMatrix cMo;
+            detector.getPose(0, tagSize, cam, cMo); // 使用HOMOGRAPHY方法优化位姿
+            if (id == 1)
+            {
+                vpRotationMatrix R;
+                cMo.extract(R);
+                vpTranslationVector t(0, -0.0584, 0); // Create a vpTranslationVector object with the desired values
+                t = R * t;                            // Perform the matrix-vector multiplication
+                cMo[0][3] = cMo[0][3] - t[0];
+                cMo[1][3] = cMo[1][3] - t[1];
+                cMo[2][3] = cMo[2][3] - t[2];
+            }
+            std::cout << "Pose of tag " << id << ": \n"
+                      << cMo << std::endl;
+            cMo_vec.push_back(cMo);
+        }
+        else
+        {
+            for (size_t i = 0; i < ids.size(); i++)
+            {
+                int id = ids[i];
+                if (id == 1)
+                {
+                    continue;
+                }
+                double tagSize = tagSizes[id];
+                vpHomogeneousMatrix cMo;
+                detector.getPose(i, tagSize, cam, cMo); // 使用HOMOGRAPHY方法优化位姿
+                std::cout << "Pose of tag " << id << ": \n"
+                          << cMo << std::endl;
+                cMo_vec.push_back(cMo);
+            }
+        }
+        double img_over = ros::Time::now().toSec();
+        cout << "over-recieve: " << 1000 * (img_over - img_recieve) << " ms" << endl;
         if (cMo_vec.size() != 0)
         {
             pose_matrix = cMo_vec[0];
@@ -211,7 +256,7 @@ int main(int argc, char **argv)
             usleep(double(25000) - 1000000 * (ros::Time::now().toSec() - img_recieve));
         }
         pbvs_publisher.publish(ros_pbvs_msg);
-        // Publish the R message
+        //  Publish the R message
         R_publisher.publish(R_msg);
         rate2.sleep();
         /*double img_send = ros::Time::now().toSec();

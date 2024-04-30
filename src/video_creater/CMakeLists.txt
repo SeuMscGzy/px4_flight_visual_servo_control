@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(aic_apo_2rd_with_d)
+project(video_creater)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-#add_compile_options(-std=c++17)
+# add_compile_options(-std=c++11)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -11,28 +11,20 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
-  px4ctrl
-  quadrotor_msgs
-  uav_utils
-  pluginlib
+  image_transport
+  cv_bridge
+  sensor_msgs
 )
-#find_package(KFR CONFIG REQUIRED)
-find_package(Eigen3 REQUIRED) 
-find_package(iir REQUIRED)
+
+# 寻找OpenCV，使用默认的OpenCV版本
+find_package(OpenCV 4 REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
-catkin_package(
-  INCLUDE_DIRS include LIBRARIES CATKIN_DEPENDS roscpp rospy std_msgs px4ctrl quadrotor_msgs uav_utils
-)
 include_directories(
   ${catkin_INCLUDE_DIRS}
-  ${EIGEN_INCLUDE_DIRS}
-  include/${PROJECT_NAME}
-  include
+  ${OpenCV_INCLUDE_DIRS}  # 确保包含OpenCV的头文件
 )
-
-
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -121,7 +113,7 @@ include_directories(
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES aic_apo_2rd_with_d
+#  LIBRARIES video_creater
 #  CATKIN_DEPENDS roscpp rospy std_msgs
 #  DEPENDS system_lib
 )
@@ -135,7 +127,7 @@ catkin_package(
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/aic_apo_2rd_with_d.cpp
+#   src/${PROJECT_NAME}/video_creater.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -146,7 +138,7 @@ catkin_package(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(aic_apo_2rd_with_d src/aic_apo_2rd_with_d.cpp)
+add_executable(video_creater src/video_creater.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -159,12 +151,11 @@ add_executable(aic_apo_2rd_with_d src/aic_apo_2rd_with_d.cpp)
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(aic_apo_2rd_with_d
-   ${catkin_LIBRARIES}
- )
-#target_link_libraries(aic_apo_2rd_with_d kfr)
+target_link_libraries(video_creater
+  ${catkin_LIBRARIES}
+  ${OpenCV_LIBRARIES}  # 确保链接OpenCV库
+)
 
-target_link_libraries(aic_apo_2rd_with_d iir::iir)
 #############
 ## Install ##
 #############
@@ -212,7 +203,7 @@ target_link_libraries(aic_apo_2rd_with_d iir::iir)
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_aic_apo_2rd_with_d.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_video_creater.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()

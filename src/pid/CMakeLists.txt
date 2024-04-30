@@ -16,6 +16,8 @@ find_package(catkin REQUIRED COMPONENTS
   uav_utils
   pluginlib
 )
+
+find_package(iir REQUIRED)
 find_package(Eigen3 REQUIRED) 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -166,6 +168,8 @@ add_executable(pid src/pid.cpp)
 target_link_libraries(pid
    ${catkin_LIBRARIES}
  )
+
+ target_link_libraries(pid iir::iir)
 
 #############
 ## Install ##

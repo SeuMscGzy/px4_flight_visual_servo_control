@@ -14,6 +14,7 @@
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
 #include <visp3/core/vpImageTools.h>
+#include <visp3/core/vpImageFilter.h>
 // #undef VISP_HAVE_V4L2
 // #undef VISP_HAVE_DC1394
 // #undef VISP_HAVE_CMU1394
@@ -76,7 +77,7 @@ int main(int argc, char **argv)
     int opt_device = 0; // For OpenCV and V4l2 grabber to set the camera device
     vpDetectorAprilTag::vpAprilTagFamily tagFamily = vpDetectorAprilTag::TAG_36h11;
     vpDetectorAprilTag::vpPoseEstimationMethod poseEstimationMethod = vpDetectorAprilTag::HOMOGRAPHY_VIRTUAL_VS;
-    double tagSize = 0.111;
+    double tagSize = 0.0795;
     float quad_decimate = 1.0;
     int nThreads = 2;
     std::string intrinsic_file = "";
@@ -238,22 +239,21 @@ int main(int argc, char **argv)
             vpImage<unsigned char> flippedImage;
             flipImage(I, flippedImage, -1); // 假设-1表示同时水平和垂直翻转
             I = flippedImage;
-            /*cv::Mat imageMat;
+            cv::Mat imageMat;
             // 使用Visp的函数将vpImage转换为cv::Mat
             vpImageConvert::convert(I, imageMat);
-
             // 创建Header，并设置时间戳为当前时间
             std_msgs::Header header;
             header.stamp = ros::Time::now();
-
             // 现在你可以使用cv_bridge将cv::Mat转换为sensor_msgs/Image了
             sensor_msgs::ImagePtr msg = cv_bridge::CvImage(header, "mono8", imageMat).toImageMsg();
-            pub.publish(msg);*/
+            pub.publish(msg);
             // vpDisplay::display(I);
             // double t = vpTime::measureTimeMs();
             std::vector<vpHomogeneousMatrix> cMo_vec;
             // std::vector<vpImagePoint> pixel_vec;
             vpHomogeneousMatrix pose_matrix;
+            vpImageFilter::gaussianFilter(I, 3, 3);
             detector.detect(I, tagSize, cam, cMo_vec);
             /*double img_over = ros::Time::now().toSec();
             cout << "over-recieve: " << 1000 * (img_over - img_recieve) << " ms" << endl;*/

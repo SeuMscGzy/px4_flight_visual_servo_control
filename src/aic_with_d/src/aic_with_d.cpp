@@ -13,7 +13,7 @@
 #include <geometry_msgs/TwistStamped.h>
 #include <geometry_msgs/AccelStamped.h>
 #include <nav_msgs/Odometry.h>
-
+#include <Iir.h>
 using namespace std;
 
 class SingleAIC2Controller
@@ -22,18 +22,18 @@ private:
     const double e_1 = 1;
     const double e_2 = 1;
     const double k_l = 1.0;
-    const double sigma_z1_inv = 0.5;
-    const double sigma_z2_inv = 0.5;
+    const double sigma_z1_inv = 1;
+    const double sigma_z2_inv = 1;
     const double sigma_w1_inv = 1.0;
     const double sigma_w2_inv = 1.0;
-    /*const double k_i = -5;
+    /*const double k_i = -4;
     const double k_p = -3.7;
     const double k_d = -4;*/
-    const double k_i = -5.2;
-    const double k_p = -3.7;
-    const double k_d = -3.3;
+    const double k_i = -4;
+    const double k_p = -5;
+    const double k_d = -3.7;
     const double T_c = 0.05;
-    const double x_bias = -0.9;
+    const double x_bias = -1;
     const double y_bias = -0.2;
     const double z_bias = -0.1;
     double y1_real_bias = 0;
@@ -63,7 +63,7 @@ public:
     }
     double limitControl(double controlValue, int which_axis)
     {
-        double limit = (which_axis != 2) ? 3 : 4; // Limit is 3 for x and y, 4 for z axis.
+        double limit = (which_axis != 2) ? 3 : 3; // Limit is 3 for x and y, 4 for z axis.
         if (abs(controlValue) >= limit)
         {
             controlValue = limit * controlValue / abs(controlValue); // Apply limit
@@ -72,7 +72,7 @@ public:
     }
     double limitIntegral(double IntegralValue, int which_axis)
     {
-        double limit = (which_axis != 2) ? 1.5 : 2; // Limit is 1.5 for x and y, 2 for z axis.
+        double limit = (which_axis != 2) ? 2 : 2; // Limit is 1.5 for x and y, 2 for z axis.
         if (abs(IntegralValue) >= limit)
         {
             IntegralValue = limit * IntegralValue / abs(IntegralValue); // Apply limit
@@ -87,10 +87,9 @@ public:
         mu_p = double(mu_p_last + T_c * (k_l * sigma_z2_inv * (y2_derivative_sampling - mu_p_last) - k_l * sigma_w1_inv * (mu_p_last + e_1 * mu_last) - k_l * sigma_w2_inv * e_2 * e_2 * mu_p_last));
         mu_last = mu;
         mu_p_last = mu_p;
-        u = double(u_last - T_c * (k_i * (y1_real_bias - mu) + k_p * (y2_derivative_sampling - mu_p)));
-        u_last = u;
+        u_last = double(u_last - T_c * (k_i * (y1_real_bias - mu) + k_p * (y2_derivative_sampling - mu_p)));
         u_last = limitIntegral(u_last, which_axis);
-        u = u - k_d * y2_derivative_sampling;
+        u = u_last - k_d * y2_derivative_sampling;
         u = limitControl(u, which_axis);
     }
 };
@@ -169,13 +168,14 @@ private:
     bool first_time_in_fun, loss_target, use_bias_;
     ros::NodeHandle nh;
 
-    ButterworthLowPassFilter filter_for_deri; // 二阶巴特沃斯LPF
+    // ButterworthLowPassFilter filter_for_deri; // 二阶巴特沃斯LPF
     LowPassFilter filter_for_img;
     SingleAIC2Controller singleaic2controller;
     ros::Subscriber px4_state_sub;
     friend class TripleAxisController;
     double loss_or_not_;
     int which_axis_;
+    Iir::Butterworth::LowPass<2> filter_4_for_deri;
 
 public:
     // 构造函数
@@ -194,7 +194,7 @@ public:
           mu_last(0.0),
           mu_p_last(0.0),
           filter_for_img(0.9),
-          filter_for_deri(20, 3),
+          // filter_for_deri(20, 3),
           y_filtered_deri(0),
           loss_target(true),
           loss_or_not_(1),
@@ -203,6 +203,7 @@ public:
           first_time_in_fun(true)
     {
         px4_state_sub = nh.subscribe("/px4_state_pub", 1, &MyController::StateCallback, this);
+        filter_4_for_deri.setup(20, 2.7);
     }
 
     void cal_single_axis_ctrl_input(double measure_single_axis, double loss_or_not, bool use_bias, int which_axis)
@@ -215,7 +216,7 @@ public:
         time_now = ros::Time::now().toSec();
         time_pass = time_now - time_last;
         y_real_derivative = (y_real - y_real_last) / time_pass; // 0.05 seconds = 50ms
-        y_filtered_deri = filter_for_deri.filter(y_real_derivative);
+        y_filtered_deri = filter_4_for_deri.filter(y_real_derivative);
         function(loss_or_not_, use_bias_, which_axis_);
         y_real_last = y_real;
         time_last = time_now;
