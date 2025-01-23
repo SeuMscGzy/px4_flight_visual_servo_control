@@ -1,3 +1,0 @@
-<launch>
-	<node name="rvizvisualisation" pkg="rviz"  type="rviz" output="screen" args="-d $(find vins)/../config/111.rviz"/>
-</launch> 
