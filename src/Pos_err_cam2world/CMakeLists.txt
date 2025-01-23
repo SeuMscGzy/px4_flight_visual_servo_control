@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(visp_apriltah_detect)
+project(Pos_err_cam2world)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -138,7 +138,7 @@ ${EIGEN_INCLUDE_DIRS}
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(apriltag_detect src/apriltag_detect.cpp)
+add_executable(pos_err_cam2world src/pos_err_cam2world.cpp.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -151,10 +151,10 @@ add_executable(apriltag_detect src/apriltag_detect.cpp)
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(apriltag_detect
+target_link_libraries(pos_err_cam2world
   ${catkin_LIBRARIES} 
  )
- target_link_libraries(apriltag_detect
+ target_link_libraries(pos_err_cam2world
  ${VISP_LIBRARIES} 
 )
 
