@@ -9,11 +9,9 @@ class ImageToVideo
 public:
     ImageToVideo()
     {
-        // 初始化节点，订阅图像话题
         image_transport::ImageTransport it(nh);
         sub = it.subscribe("camera/image", 1, &ImageToVideo::imageCallback, this);
 
-        // 初始化视频编写器
         video_writer = cv::VideoWriter("output.avi", cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 10, cv::Size(640, 480));
     }
 
@@ -21,7 +19,6 @@ public:
     {
         try
         {
-            // 将ROS图像消息转换为OpenCV图像格式
             cv::Mat frame = cv_bridge::toCvShare(msg, "bgr8")->image;
 
             if (!frame.empty())

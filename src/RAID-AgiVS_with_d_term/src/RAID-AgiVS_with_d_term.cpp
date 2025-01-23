@@ -120,8 +120,8 @@ public:
 class ButterworthLowPassFilter
 {
 private:
-    double fs; // 采样频率
-    double fc; // 截止频率
+    double fs; // sampling frequency
+    double fc; // cut-off frequency
     double a0, a1, a2, b1, b2;
     double prevX1, prevX2, prevY1, prevY2;
 
@@ -176,7 +176,7 @@ private:
     ros::NodeHandle nh;
     ros::Timer timer;
 
-    // ButterworthLowPassFilter filter_for_deri; // 二阶巴特沃斯LPF
+    // ButterworthLowPassFilter filter_for_deri; 
     AIC2Controller aic2controller;
     // Iir::Butterworth::LowPass<4> filter_4_for_img;
     Iir::Butterworth::LowPass<2> filter_4_for_deri;
@@ -262,11 +262,11 @@ public:
 
     void function(double loss_or_not, bool use_bias, int which_axis)
     {
-        if (loss_or_not == 1 && loss_target == false) // 从能看到目标到看不到目标
+        if (loss_or_not == 1 && loss_target == false) // From seeing the target to not seeing the target
         {
             loss_target = true;
         }
-        if (loss_or_not == 0 && loss_target == true) // 从不能看到目标到能看到目标
+        if (loss_or_not == 0 && loss_target == true) // From not seeing the target to seeing the target
         {
             loss_target = false;
             first_time_in_fun = true;
@@ -302,7 +302,7 @@ public:
 
     void StateCallback(const std_msgs::Int32::ConstPtr &msg)
     {
-        if (msg->data != 3) // 不在cmd模式下时，控制量为0；
+        if (msg->data != 3) // When not in cmd mode, the control amount is 0.
         {
             u = 0;
             u_last = 0;
@@ -329,7 +329,6 @@ private:
     double last_time = 0;
 
 public:
-    // 构造函数
     TripleAxisController()
         : nh("~"), des_yaw(0)
     {
@@ -343,14 +342,12 @@ public:
 
     void callback(const std_msgs::Float64MultiArray::ConstPtr &msg)
     {
-        // 更新每个轴的控制器
-        // cout << "Time spent: " << 1000 * (ros::Time::now().toSec() - msg->data[3]) << " ms" << endl;
-        // cout << "运行间隔时间: " << 1000 * (ros::Time::now().toSec() - last_time) << " ms" << endl;
+        // Update the controller for each axis
         last_time = ros::Time::now().toSec();
         des_yaw = msg->data[5];
         controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
         controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 0, 1);
-        controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2); // 定高跟踪
+        controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2); // Constant height tracking
     }
 
     void ground_truth_callback(const geometry_msgs::TwistStamped::ConstPtr &msg)

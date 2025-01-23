@@ -31,7 +31,7 @@ private:
     const double sigma_w3_inv = 1.0;
     double k_i = -3;
     double k_p = -1.5;
-    double k_d = 0; // 逐渐增大
+    double k_d = 0; 
     const double T_c = 0.01;
     const double x_bias = -1;
     const double y_bias = -0.2;
@@ -109,7 +109,7 @@ public:
             delta_u = T_c * (k_i * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu)) + k_p * ((1 - trust_param_y2) * (y2_APO_fast - mu_p) + trust_param_y2 * (y2_derivative_sampling - mu_p)) + k_d * ((1 - trust_param_y3) * (y3_APO_fast - mu_pp) + trust_param_y3 * (y3_real_slow - mu_pp)));
             u = double(u_last - delta_u);
         }
-        if (which_axis == 2) // 控制量限幅
+        if (which_axis == 2) 
         {
             if (abs(u) >= 0.4)
             {
@@ -368,11 +368,11 @@ public:
     }
     void function(double loss_or_not, bool use_bias, int which_axis)
     {
-        if (loss_or_not == 1 && loss_target == false) // 从能看到目标到看不到目标
+        if (loss_or_not == 1 && loss_target == false)
         {
             loss_target = true;
         }
-        if (loss_or_not == 0 && loss_target == true) // 从不能看到目标到能看到目标
+        if (loss_or_not == 0 && loss_target == true) 
         {
             loss_target = false;
             first_time_in_fun = true;
@@ -427,7 +427,7 @@ public:
 
     void StateCallback(const std_msgs::Int32::ConstPtr &msg)
     {
-        if (msg->data != 3) // 不在cmd模式下时，控制量为0；
+        if (msg->data != 3) 
         {
             u = 0;
             u_last = 0;
@@ -471,26 +471,9 @@ public:
 
     void callback(const std_msgs::Float64MultiArray::ConstPtr &msg)
     {
-        // 更新每个轴的控制器
-        // if (abs(msg->data[0]) > 0.2 || abs(msg->data[1]) > 0.2)
-        //{
         controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
         controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 0, 1);
-        controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 0, 2); // 定高跟踪
-        //}
-        /*else if (abs(msg->data[0]) != 0 && abs(msg->data[1]) != 0) // 跟踪误差很小 可以开始边下降边跟踪
-        {
-            controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4],0,0);
-            controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4],0,1);
-            // controllerZ.first_time_in_fun = true; //这样每次都会赋值，考虑加入逻辑判断。
-            controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4],0,2);                // 下降
-            if (abs(msg->data[0]) < 0.2 && abs(msg->data[1]) < 0.2 && abs(msg->data[2]) < 0.3) // 着陆
-            {
-                quadrotor_msgs::TakeoffLand msg;
-                msg.takeoff_land_cmd = 2; // 设置为着陆指令
-                land_pub.publish(msg);
-            }
-        }*/
+        controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 0, 2); 
     }
 
     void ground_truth_callback(const geometry_msgs::TwistStamped::ConstPtr &msg)
@@ -534,7 +517,6 @@ public:
         msg1.data[6] = controllerX.y_filtered_deri;
         msg1.data[7] = controllerX.y_filtered_2deri;
         msg1.data[8] = controllerX.measure;
-        // cout << "消息已经发送" << endl;
         pub_hat_x.publish(msg1);
     }
 
@@ -547,8 +529,6 @@ public:
             rate.sleep();
         }
     }
-
-    // 其他必要的方法
 };
 
 int main(int argc, char **argv)

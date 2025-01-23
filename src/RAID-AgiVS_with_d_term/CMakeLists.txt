@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(aic_apo_2rd_with_d)
+project(RAID-AgiVS_with_d_term)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 #add_compile_options(-std=c++17)
@@ -146,7 +146,7 @@ catkin_package(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(aic_apo_2rd_with_d src/aic_apo_2rd_with_d.cpp)
+add_executable(RAID-AgiVS_with_d_term src/RAID-AgiVS_with_d_term.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -159,12 +159,12 @@ add_executable(aic_apo_2rd_with_d src/aic_apo_2rd_with_d.cpp)
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(aic_apo_2rd_with_d
+target_link_libraries(RAID-AgiVS_with_d_term
    ${catkin_LIBRARIES}
  )
 #target_link_libraries(aic_apo_2rd_with_d kfr)
 
-target_link_libraries(aic_apo_2rd_with_d iir::iir)
+target_link_libraries(RAID-AgiVS_with_d_term iir::iir)
 #############
 ## Install ##
 #############

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(aic_plus_apo)
+project(RAID-AgiVS_without_d_term)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -28,7 +28,7 @@ include_directories(
   include
 )
 
-add_executable(aic_plus_apo src/aic_plus_apo.cpp)
-add_dependencies(aic_plus_apo ${catkin_EXPORTED_TARGETS})
+add_executable(RAID-AgiVS_without_d_term src/RAID-AgiVS_without_d_term.cpp)
+add_dependencies(RAID-AgiVS_without_d_term ${catkin_EXPORTED_TARGETS})
 
-target_link_libraries(aic_plus_apo ${catkin_LIBRARIES})
+target_link_libraries(RAID-AgiVS_without_d_term ${catkin_LIBRARIES})
