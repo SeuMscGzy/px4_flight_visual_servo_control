@@ -47,3 +47,5 @@
    ---Flight status determination: In the px4ctrl package. Thanks for the open source project 'Fast-Drone-250' of Fei Gao's team.
    
    ---Positioning from the Motion Capture System: In the motion_cap_to_odom package.
+
+**Note:** You do **not** need to use all features of this repository. Each functional package is designed to be independently buildable and usable. Feel free to pick and compile only the packages you need for your application. 
