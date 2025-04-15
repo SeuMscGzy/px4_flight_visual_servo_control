@@ -33,12 +33,46 @@ private:
     const double k_p = -5;
     const double k_d = -3.7;
     const double T_c = 0.05;
-    const double x_bias = -1;
-    const double y_bias = -0.2;
-    const double z_bias = -0.1;
+    double x_bias = -0.3;
+    double y_bias = -0.3;
+    double z_bias = 1;
     double y1_real_bias = 0;
+    ros::NodeHandle nh;
+    ros::Subscriber number_sub;
 
 public:
+    SingleAIC2Controller() // 构造函数
+    {
+        // 初始化数字话题的订阅器
+        number_sub = nh.subscribe("/bias_number", 10, &SingleAIC2Controller::numberCallback, this, ros::TransportHints().tcpNoDelay());
+    }
+
+    void numberCallback(const std_msgs::Int32::ConstPtr &msg)
+    {
+        int number = msg->data;
+        switch (number)
+        {
+        case 1:
+            // 恢复初始值
+            x_bias = -0.3;
+            y_bias = -0.3;
+            z_bias = 1;
+            break;
+        case 2:
+            // 将所有 bias 置零
+            x_bias = 0;
+            y_bias = 0;
+            z_bias = 1;
+            break;
+        default:
+            // 默认情况下，也恢复初始值
+            x_bias = -0.3;
+            y_bias = -0.3;
+            z_bias = 1;
+            break;
+        }
+    }
+
     double adjustBias(double value, int which_axis, bool use_bias) // which_axis: 0 for x, 1 for y, 2 for z
     {
         if (use_bias)
@@ -175,12 +209,14 @@ private:
     friend class TripleAxisController;
     double loss_or_not_;
     int which_axis_;
+    int px4_state;
     Iir::Butterworth::LowPass<2> filter_4_for_deri;
 
 public:
     // 构造函数
     MyController()
         : nh("~"),
+          px4_state(1),
           y_real(0.0),
           u(0.0),
           u_last(0.0),
@@ -248,6 +284,7 @@ public:
 
     void StateCallback(const std_msgs::Int32::ConstPtr &msg)
     {
+        px4_state = msg->data;
         if (msg->data != 3) // 不在cmd模式下时，控制量为0；
         {
             u = 0;
@@ -266,12 +303,13 @@ private:
     MyController controllerX, controllerY, controllerZ;
     ros::NodeHandle nh;
     ros::Subscriber sub, ground_truth_sub, ground_truth_second_sub, ground_truth_pose_sub;
-    ros::Publisher pub_hat_x, acc_cmd_pub;
+    ros::Publisher pub_hat_x, acc_cmd_pub, pub_land;
     quadrotor_msgs::PositionCommand acc_msg;
     double des_yaw;
     double ground_truth_first_deri_x = 0, ground_truth_first_deri_y = 0, ground_truth_first_deri_z = 0;
     double ground_truth_x = 0, ground_truth_y = 0, ground_truth_z = 0;
     double last_time = 0;
+    bool keep_in_land = false;
 
 public:
     // 构造函数
@@ -282,6 +320,7 @@ public:
         ground_truth_sub = nh.subscribe("/mavros/local_position/velocity_local", 10, &TripleAxisController::ground_truth_callback, this);
         ground_truth_pose_sub = nh.subscribe("/vrpn_client_node/MCServer/5/pose", 10, &TripleAxisController::ground_truth_pose_callback, this);
         pub_hat_x = nh.advertise<std_msgs::Float64MultiArray>("/hat_x_topic", 100);
+        pub_land = nh.advertise<std_msgs::Bool>("/flight_land", 1);
         acc_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/acc_cmd", 1);
     }
 
@@ -292,10 +331,30 @@ public:
         // cout << "运行间隔时间: " << 1000 * (ros::Time::now().toSec() - last_time) << " ms" << endl;
         last_time = ros::Time::now().toSec();
         des_yaw = msg->data[5];
-        controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
-        controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 0, 1);
-        controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2); // 定高跟踪
-
+        if (msg->data[0] > 0.15 || msg->data[1] > 0.15)
+        {
+            controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
+            controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 1, 1);
+            controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2); // 定高跟踪
+            std_msgs::Bool land_msg;
+            land_msg.data = false;
+            pub_land.publish(land_msg);
+        }
+        else
+        {
+            controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
+            controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 1, 1);
+            controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 0, 2); // 闭环着陆
+            if ((msg->data[2] < 0.15 && msg->data[4] == 0 && controllerX.px4_state == 3) || keep_in_land)
+            {
+                // 发送强制着陆指令，因为可能快要看不到目标了，开环近距离着陆
+                keep_in_land = true;
+                std_msgs::Bool land_msg;
+                land_msg.data = true;
+                pub_land.publish(land_msg);
+                cout << "land message sent" << endl;
+            }
+        }
         acc_msg.position.x = 0;
         acc_msg.position.y = 0;
         acc_msg.position.z = 0;

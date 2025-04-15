@@ -71,10 +71,10 @@ public:
             tempMat = cv::Mat(3, 3, CV_64F, data2);
         }
         R = tempMat;
-        image_sub_ = nh_.subscribe("/object_pose", 1, &AprilTagDetector::imageCb, this);
-        odom_sub_ = nh_.subscribe("/vins_fusion/imu_propagate", 1, &AprilTagDetector::odomCallback, this);
+        image_sub_ = nh_.subscribe("/object_pose", 1, &AprilTagDetector::imageCb, this, ros::TransportHints().tcpNoDelay());
+        odom_sub_ = nh_.subscribe("/vins_fusion/imu_propagate", 1, &AprilTagDetector::odomCallback, this, ros::TransportHints().tcpNoDelay());
+        R_subscriber = nh_.subscribe("/R_data", 1, &AprilTagDetector::RCallback, this, ros::TransportHints().tcpNoDelay());
         point_pub_ = nh_.advertise<std_msgs::Float64MultiArray>("/point_with_fixed_delay", 1);
-        R_subscriber = nh_.subscribe("/R_data", 1, &AprilTagDetector::RCallback, this);
     }
 
     ~AprilTagDetector()
@@ -173,7 +173,7 @@ public:
                 q = Eigen::Quaterniond(eigen_mat);
                 double yaw = fromQuaternion2yaw(q);
                 yaw = yaw + M_PI / 2;
-                cout << yaw << endl;
+                //cout << yaw << endl;
                 desired_yaw = yaw;
             } // 由于相机安装角度问题，需要加上90度
 

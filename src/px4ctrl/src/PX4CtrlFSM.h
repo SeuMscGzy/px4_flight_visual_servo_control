@@ -14,7 +14,7 @@
 #include <mavros_msgs/PositionTarget.h>
 #include <geometry_msgs/Point.h>
 #include <geometry_msgs/Vector3.h>
-
+#include <std_msgs/Empty.h>
 #include "controller.h"
 #include <std_msgs/Bool.h>
 struct AutoTakeoffLand_t
@@ -68,6 +68,7 @@ public:
 	PX4CtrlFSM(Parameter_t &, LinearControl &);
 	void process();
 	void loss_target_callback(const std_msgs::Float64MultiArray::ConstPtr &msg);
+	void landing_callback(const std_msgs::Bool::ConstPtr &msg);
 	bool rc_is_received(const ros::Time &now_time);
 	bool cmd_is_received(const ros::Time &now_time);
 	bool odom_is_received(const ros::Time &now_time);
@@ -78,6 +79,7 @@ public:
 	bool get_landed() { return takeoff_land.landed; }
 
 private:
+	bool in_landing = false;
 	State_t state; // Should only be changed in PX4CtrlFSM::process() function!
 	AutoTakeoffLand_t takeoff_land;
 	ros::NodeHandle nh;

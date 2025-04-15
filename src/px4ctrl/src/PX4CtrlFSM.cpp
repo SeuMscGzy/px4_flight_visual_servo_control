@@ -82,9 +82,9 @@ void PX4CtrlFSM::process()
 			toggle_offboard_mode(false);
 			ROS_WARN("[px4ctrl] AUTO_HOVER(L2) --> MANUAL_CTRL(L1)");
 		}
-		else if (rc_data.is_command_mode && cmd_is_received(now_time) && loss_target_time_count == 0 && !takeoff_land_data.triggered)
+		else if (rc_data.is_command_mode && cmd_is_received(now_time) && loss_target_time_count == 0 && !takeoff_land_data.triggered && !in_landing)
 		{
-			cout << "进了这里" << endl;
+			// cout << "进了这里" << endl;
 			if (state_data.current_state.mode == "OFFBOARD")
 			{
 				state = CMD_CTRL;
@@ -118,8 +118,12 @@ void PX4CtrlFSM::process()
 			toggle_offboard_mode(false);
 			ROS_WARN("[px4ctrl] From CMD_CTRL(L3) to MANUAL_CTRL(L1)!");
 		}
-		else if (!rc_data.is_command_mode || !cmd_is_received(now_time) || loss_target_time_count > 3)
+		else if (!rc_data.is_command_mode || !cmd_is_received(now_time) || loss_target_time_count > 3 || in_landing)
 		{
+			if(in_landing)
+			{
+				ROS_INFO("[px4ctrl] Need AUTO_HOVER(L2) Because of Landing!");
+			}
 			state = AUTO_HOVER;
 			set_hov_with_odom();
 			des = get_hover_des();
@@ -140,28 +144,38 @@ void PX4CtrlFSM::process()
 	{
 		if (param.takeoff_land.enable_auto_arm)
 		{
-			if (rc_data.toggle_reboot)
+			if (!in_landing)
+			{
+				if (rc_data.toggle_reboot)
+				{
+					if (state_data.current_state.armed)
+					{
+						// ROS_ERROR("[px4ctrl] Reject arm! The drone has already armed!");
+					}
+					else
+					{
+						toggle_arm_disarm(true); // 解锁
+					}
+				} // Try to arm.
+				else
+				{
+					if (!state_data.current_state.armed)
+					{
+						// ROS_ERROR("[px4ctrl] Reject disarm! The drone has already disarmed!");
+					}
+					else
+					{
+						toggle_arm_disarm(false); // 锁
+					}
+				} // Try to disarm.
+			}
+			else if (u.thrust <= 0.01)
 			{
 				if (state_data.current_state.armed)
 				{
-					// ROS_ERROR("[px4ctrl] Reject are! The drone has already armed!");
+					toggle_arm_disarm(false);
 				}
-				else
-				{
-					toggle_arm_disarm(true); // 解锁
-				}
-			} // Try to arm.
-			else
-			{
-				if (!state_data.current_state.armed)
-				{
-					// ROS_ERROR("[px4ctrl] Reject disarm! The drone has already disarmed!");
-				}
-				else
-				{
-					toggle_arm_disarm(false); // 锁
-				}
-			} // Try to disarm.
+			}
 		}
 	}
 
@@ -173,10 +187,13 @@ void PX4CtrlFSM::process()
 	}
 
 	// STEP4: solve and update new control commands
-	debug_msg = controller.calculateControl(des, odom_data, imu_data, u, static_cast<int>(state));
+	debug_msg = controller.calculateControl(des, odom_data, imu_data, u, static_cast<int>(state), in_landing);
 	debug_msg.header.stamp = now_time;
 	debug_pub.publish(debug_msg);
-
+	if (in_landing)
+	{
+		u.q = imu_data.q;
+	}
 	// STEP5: publish control commands to mavros
 	publish_acceleration_ctrl(u, now_time);
 
@@ -208,6 +225,18 @@ void PX4CtrlFSM::loss_target_callback(const std_msgs::Float64MultiArray::ConstPt
 		{
 			loss_target_time_count++;
 		}
+	}
+}
+
+void PX4CtrlFSM::landing_callback(const std_msgs::Bool::ConstPtr &msg)
+{
+	if (msg->data)
+	{
+		in_landing = true;
+	}
+	else
+	{
+		in_landing = false;
 	}
 }
 

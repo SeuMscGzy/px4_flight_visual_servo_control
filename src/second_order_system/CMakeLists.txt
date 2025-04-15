@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(img_detect)
+project(second_order_system)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -11,11 +11,9 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
-  cv_bridge
-  image_transport
 )
-find_package(apriltag REQUIRED)
-find_package(VISP REQUIRED)
+find_package(Eigen3 REQUIRED) 
+
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -107,7 +105,7 @@ find_package(VISP REQUIRED)
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES img_detect
+#  LIBRARIES sencond_order_system
 #  CATKIN_DEPENDS roscpp rospy std_msgs
 #  DEPENDS system_lib
 )
@@ -121,13 +119,11 @@ catkin_package(
 include_directories(
 # include
   ${catkin_INCLUDE_DIRS}
-  /usr/local/include/acado
 )
-link_directories(/usr/local/lib)
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/img_detect.cpp
+#   src/${PROJECT_NAME}/sencond_order_system.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -138,7 +134,7 @@ link_directories(/usr/local/lib)
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(img_detect src/img_detect.cpp)
+add_executable(second_order_system src/second_order_system.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -151,15 +147,9 @@ add_executable(img_detect src/img_detect.cpp)
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(img_detect
+target_link_libraries(second_order_system
    ${catkin_LIBRARIES}
  )
-
- target_link_libraries(img_detect
- ${VISP_LIBRARIES} 
- apriltag
- acado_toolkit_s
-)
 
 #############
 ## Install ##
@@ -208,7 +198,7 @@ target_link_libraries(img_detect
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_img_detect.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_sencond_order_system.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()

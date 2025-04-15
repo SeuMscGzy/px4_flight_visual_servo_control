@@ -19,16 +19,22 @@ using namespace std;
 class PID2Controller
 {
 private:
-    const double k_i = 1;
-    const double k_p = 4;
-    const double k_d = 4;
+    const double k_i = -0.2;
+    const double k_p = -4;
+    const double k_d = -4;
     const double T_c = 0.05;
-    const double x_bias = -1;
-    const double y_bias = -0.2;
-    const double z_bias = -0.1;
+    double x_bias = -0;
+    double y_bias = -0.1;
+    double z_bias = -0.2;
     double y1_real_bias = 0;
+    ros::NodeHandle nh;
 
 public:
+    PID2Controller() // 构造函数
+    {
+    }
+
+
     double adjustBias(double value, int which_axis, bool use_bias) // which_axis: 0 for x, 1 for y, 2 for z
     {
         if (use_bias)
@@ -51,6 +57,7 @@ public:
             return value;
         }
     }
+
     double limitControl(double controlValue, int which_axis)
     {
         double limit = (which_axis != 2) ? 3 : 3; // Limit is 3 for x and y, 4 for z axis.
@@ -60,6 +67,7 @@ public:
         }
         return controlValue;
     }
+
     double limitIntegral(double IntegralValue, int which_axis)
     {
         double limit = (which_axis != 2) ? 1 : 1; // Limit is 1.5 for x and y, 2 for z axis.
@@ -159,12 +167,14 @@ private:
     friend class TripleAxisController;
     double loss_or_not_;
     int which_axis_;
+    int px4_state;
     Iir::Butterworth::LowPass<2> filter_4_for_deri;
 
 public:
     // 构造函数
     MyController()
         : nh("~"),
+          px4_state(1),
           y_real(0.0),
           u(0.0),
           y_real_last(0.0),
@@ -229,6 +239,7 @@ public:
 
     void StateCallback(const std_msgs::Int32::ConstPtr &msg)
     {
+        px4_state = msg->data;
         if (msg->data != 3) // 不在cmd模式下时，控制量为0；
         {
             u = 0;
@@ -243,18 +254,20 @@ private:
     MyController controllerX, controllerY, controllerZ;
     ros::NodeHandle nh;
     ros::Subscriber sub, ground_truth_sub, ground_truth_second_sub, ground_truth_pose_sub;
-    ros::Publisher pub_hat_x, acc_cmd_pub;
+    ros::Publisher pub_hat_x, acc_cmd_pub, pub_land, x_pub;
     quadrotor_msgs::PositionCommand acc_msg;
     double des_yaw;
     double ground_truth_first_deri_x = 0, ground_truth_first_deri_y = 0, ground_truth_first_deri_z = 0;
     double ground_truth_x = 0, ground_truth_y = 0, ground_truth_z = 0;
     double last_time = 0;
+    bool keep_in_land = false;
 
 public:
     // 构造函数
     TripleAxisController()
         : nh("~"), des_yaw(0)
     {
+        x_pub = nh.advertise<std_msgs::Float64>("/input_x_axis", 100);
         sub = nh.subscribe("/point_with_fixed_delay", 1, &TripleAxisController::callback, this);
         ground_truth_sub = nh.subscribe("/mavros/local_position/velocity_local", 10, &TripleAxisController::ground_truth_callback, this);
         ground_truth_pose_sub = nh.subscribe("/vrpn_client_node/MCServer/5/pose", 10, &TripleAxisController::ground_truth_pose_callback, this);
@@ -265,13 +278,15 @@ public:
     void callback(const std_msgs::Float64MultiArray::ConstPtr &msg)
     {
         // 更新每个轴的控制器
-        // cout << "Time spent: " << 1000 * (ros::Time::now().toSec() - msg->data[3]) << " ms" << endl;
-        // cout << "运行间隔时间: " << 1000 * (ros::Time::now().toSec() - last_time) << " ms" << endl;
-        last_time = ros::Time::now().toSec();
-        des_yaw = msg->data[5];
+        des_yaw = 0;
+
         controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
-        controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 0, 1);
+        controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 1, 1);
         controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2); // 定高跟踪
+
+        std_msgs::Float64 input_data_msg;
+        input_data_msg.data = controllerX.u;
+        x_pub.publish(input_data_msg);
 
         acc_msg.position.x = 0;
         acc_msg.position.y = 0;
@@ -292,19 +307,6 @@ public:
 
         std_msgs::Float64MultiArray msg1;
         msg1.data.resize(27);
-
-        for (int i = 0; i < 2; i++)
-        {
-            msg1.data[i] = 0;
-        }
-        for (int i = 9; i < 11; i++)
-        {
-            msg1.data[i] = 0;
-        }
-        for (int i = 18; i < 20; i++)
-        {
-            msg1.data[i] = 0;
-        }
 
         msg1.data[2] = controllerX.u;
         msg1.data[3] = controllerX.y_real;

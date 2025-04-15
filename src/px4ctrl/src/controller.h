@@ -63,7 +63,7 @@ public:
 	quadrotor_msgs::Px4ctrlDebug calculateControl(const Desired_State_t &des,
 												  const Odom_Data_t &odom,
 												  const Imu_Data_t &imu,
-												  Controller_Output_t &u, int state_count);
+												  Controller_Output_t &u, int state_count, bool in_landing_);
 	bool estimateThrustModel(const Eigen::Vector3d &est_v,
 							 const Parameter_t &param);
 	void resetThrustMapping(void);

@@ -10,7 +10,7 @@ public:
     ImageToVideo()
     {
         image_transport::ImageTransport it(nh);
-        sub = it.subscribe("camera/image", 1, &ImageToVideo::imageCallback, this);
+        sub = it.subscribe("/usb_cam/image_raw", 1, &ImageToVideo::imageCallback, this);
 
         video_writer = cv::VideoWriter("output.avi", cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 10, cv::Size(640, 480));
     }

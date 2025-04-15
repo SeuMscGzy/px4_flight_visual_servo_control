@@ -67,7 +67,7 @@ LinearControl::LinearControl(Parameter_t &param) : param_(param)
 quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State_t &des,
                                                              const Odom_Data_t &odom,
                                                              const Imu_Data_t &imu,
-                                                             Controller_Output_t &u, int state_count)
+                                                             Controller_Output_t &u, int state_count, bool in_landing_)
 {
   if (state_count == 1)
   {
@@ -133,7 +133,7 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   {
     u.thrust = 0.01;
   }
-  if (last_state_count == 1 && state_count == 2)
+  if ((last_state_count == 1 && state_count == 2) || in_landing_)
   {
     enter_count = 0;
   }
@@ -158,7 +158,7 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   {
     in_the_slow_thrust = false;
   }
-  if (last_in_the_slow_thrust == true && in_the_slow_thrust == false && state_count != 3) // 缓慢加速起飞
+  if (last_in_the_slow_thrust == true && in_the_slow_thrust == false && state_count != 3 && !in_landing_) // 缓慢加速起飞
   {
     takeoff_count = 0;
   }

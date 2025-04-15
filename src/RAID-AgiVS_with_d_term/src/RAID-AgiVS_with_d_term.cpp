@@ -14,6 +14,7 @@
 #include <geometry_msgs/AccelStamped.h>
 #include <nav_msgs/Odometry.h>
 #include <Iir.h>
+#include <std_msgs/Empty.h>
 using namespace std;
 
 class AIC2Controller
@@ -26,19 +27,56 @@ private:
     const double sigma_z2_inv = 1.0;
     const double sigma_w1_inv = 1.0;
     const double sigma_w2_inv = 1.0;
-    double k_i = -4;
-    double k_p = -5.5;
-    double k_d = -4;
+    /*    double k_i = -0.5;
+    double k_p = -5;
+    double k_d = -3;*/
+    double k_i = -0.5;
+    double k_p = -5.1;
+    double k_d = -3;
     const double T_c = 0.01;
-    const double x_bias = -1;
-    const double y_bias = -0.2;
-    const double z_bias = -0.1;
+    double x_bias = -0.3;
+    double y_bias = -0.3;
+    double z_bias = 1;
     double y1_APO_fast_bias = 0;
     double y1_real_bias = 0;
+    ros::NodeHandle nh;
+    ros::Subscriber number_sub;
     std::vector<double> trust_array_y1 = {1, 0.75, 0.65, 0.55, 0.45};
     std::vector<double> trust_array_y2 = {0.5, 0.5, 0.5, 0.5, 0.5};
 
 public:
+    AIC2Controller() // 构造函数
+    {
+        // 初始化数字话题的订阅器
+        number_sub = nh.subscribe("/bias_number", 10, &AIC2Controller::numberCallback, this, ros::TransportHints().tcpNoDelay());
+    }
+
+    void numberCallback(const std_msgs::Int32::ConstPtr &msg)
+    {
+        int number = msg->data;
+        switch (number)
+        {
+        case 1:
+            // 恢复初始值
+            x_bias = -0.3;
+            y_bias = -0.3;
+            z_bias = 1;
+            break;
+        case 2:
+            // 将所有 bias 置零
+            x_bias = 0;
+            y_bias = 0;
+            z_bias = 1;
+            break;
+        default:
+            // 默认情况下，也恢复初始值
+            x_bias = -0.3;
+            y_bias = -0.3;
+            z_bias = 1;
+            break;
+        }
+    }
+
     double adjustBias(double value, int which_axis, bool use_bias) // which_axis: 0 for x, 1 for y, 2 for z
     {
         if (use_bias)
@@ -61,6 +99,7 @@ public:
             return value;
         }
     }
+
     double limitControl(double controlValue, int which_axis)
     {
         double limit = (which_axis != 0) ? 3 : 3; // Limit is 3 for y and z, 1.5 for x axis.
@@ -70,6 +109,7 @@ public:
         }
         return controlValue;
     }
+
     double limitIntegral(double IntegralValue, int which_axis)
     {
         double limit = (which_axis != 0) ? 1 : 1; // Limit is 1.5 for y and z, 0.75 for x axis.
@@ -90,11 +130,23 @@ public:
         mu_p = double(mu_p_last + T_c * ((1 - trust_param_y2) * k_l * sigma_z2_inv * (y2_APO_fast - mu_p_last) + trust_param_y2 * k_l * sigma_z2_inv * (y2_derivative_sampling - mu_p_last) - k_l * sigma_w1_inv * (mu_p_last + e_1 * mu_last) - k_l * sigma_w2_inv * e_2 * e_2 * mu_p_last));
         mu_last = mu;
         mu_p_last = mu_p;
-        u_last = double(u_last - T_c * (k_i * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu)) + k_p * ((1 - trust_param_y2) * (y2_APO_fast - mu_p) + trust_param_y2 * (y2_derivative_sampling - mu_p))));
+        u_last = double(u_last - T_c * (k_i * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu))));
         u_last = limitIntegral(u_last, which_axis);
-        u = u_last - k_d * (1 - trust_param_y2) * y2_APO_fast - k_d * trust_param_y2 * y2_derivative_sampling;
+        u = u_last - k_d * (1 - trust_param_y2) * y2_APO_fast - k_d * trust_param_y2 * y2_derivative_sampling - k_p * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu));
         u = limitControl(u, which_axis);
         // cout << which_axis << ": " << u_last << " " << mu << " " << mu_p << " " << u << endl;
+        /*if (which_axis == 0)
+        {
+            cout << "x_bias: " << x_bias << endl;
+        }
+        else if (which_axis == 1)
+        {
+            cout << "y_bias: " << y_bias << endl;
+        }
+        else
+        {
+            cout << "z_bias: " << z_bias << endl;
+        }*/
     }
 };
 
@@ -176,7 +228,8 @@ private:
     ros::NodeHandle nh;
     ros::Timer timer;
 
-    // ButterworthLowPassFilter filter_for_deri; 
+    // ButterworthLowPassFilter filter_for_deri; // 二阶巴特沃斯LPF
+    LowPassFilter filter_for_img;
     AIC2Controller aic2controller;
     // Iir::Butterworth::LowPass<4> filter_4_for_img;
     Iir::Butterworth::LowPass<2> filter_4_for_deri;
@@ -184,12 +237,14 @@ private:
     friend class TripleAxisController;
     double loss_or_not_;
     int which_axis_;
+    int px4_state;
 
 public:
     // 构造函数
     MyController()
         : hat_x_last(Eigen::Vector2d::Zero()),
           nh("~"),
+          px4_state(1),
           hat_x(Eigen::Vector2d::Zero()),
           predict_y(0.0),
           y_real(0.0),
@@ -205,6 +260,7 @@ public:
           mu_last(0.0),
           mu_p_last(0.0),
           timer_count(0),
+          filter_for_img(0.9),
           // filter_for_deri(20, 3),
           y_filtered_deri(0),
           loss_target(true),
@@ -215,15 +271,15 @@ public:
     {
         A_bar << 0.518572754477203, 0.00740818220681718,
             -6.66736398613546, 0.963063686886233;
-        B_bar << 4.10403479014204e-05,
-            0.00987060308099953;
+        B_bar << 0,
+            0;
         C_bar << 0.481427245526137,
             6.66736398622287;
         A0 << 1, 0.0100000000000000,
             0, 1;
         B0 << 5.00000000000000e-05,
             0.0100000000000000;
-        px4_state_sub = nh.subscribe("/px4_state_pub", 1, &MyController::StateCallback, this);
+        px4_state_sub = nh.subscribe("/px4_state_pub", 1, &MyController::StateCallback, this, ros::TransportHints().tcpNoDelay());
         filter_4_for_deri.setup(20, 2.7);
     }
 
@@ -233,6 +289,8 @@ public:
         use_bias_ = use_bias;
         which_axis_ = which_axis;
         y_real = measure_single_axis;
+        y_real = filter_for_img.filter(y_real);
+        // y_real = filter_4_for_img.filter(y_real);
 
         time_now = ros::Time::now().toSec();
         time_pass = time_now - time_last;
@@ -285,12 +343,14 @@ public:
             if (timer_count == 0)
             {
                 predict_y = y_real;
+                u = 0;
                 hat_x = A_bar * hat_x_last + B0 * u + C_bar * predict_y;
                 aic2controller.computeControl(timer_count, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, mu, mu_p, use_bias, which_axis);
             }
             else
             {
                 Eigen::Vector2d coeff(1, 0);
+                u = 0;
                 predict_y = coeff.transpose() * (A0 * hat_x_last + B0 * u);
                 hat_x = A_bar * hat_x_last + B_bar * u + C_bar * predict_y;
                 aic2controller.computeControl(timer_count, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, mu, mu_p, use_bias, which_axis);
@@ -320,22 +380,24 @@ private:
     MyController controllerX, controllerY, controllerZ;
     ros::NodeHandle nh;
     ros::Subscriber sub, ground_truth_sub, ground_truth_second_sub, ground_truth_pose_sub;
-    ros::Publisher pub_hat_x, acc_cmd_pub;
+    ros::Publisher pub_hat_x, acc_cmd_pub, pub_land;
     quadrotor_msgs::PositionCommand acc_msg;
     double des_yaw;
     ros::Timer control_update_timer;
     double ground_truth_first_deri_x = 0, ground_truth_first_deri_y = 0, ground_truth_first_deri_z = 0;
     double ground_truth_x = 0, ground_truth_y = 0, ground_truth_z = 0;
     double last_time = 0;
+    bool keep_in_land = false;
 
 public:
     TripleAxisController()
         : nh("~"), des_yaw(0)
     {
-        sub = nh.subscribe("/point_with_fixed_delay", 1, &TripleAxisController::callback, this);
+        sub = nh.subscribe("/point_with_fixed_delay", 1, &TripleAxisController::callback, this, ros::TransportHints().tcpNoDelay());
         ground_truth_sub = nh.subscribe("/mavros/local_position/velocity_local", 10, &TripleAxisController::ground_truth_callback, this);
         ground_truth_pose_sub = nh.subscribe("/vrpn_client_node/MCServer/5/pose", 10, &TripleAxisController::ground_truth_pose_callback, this);
         pub_hat_x = nh.advertise<std_msgs::Float64MultiArray>("/hat_x_topic", 100);
+        pub_land = nh.advertise<std_msgs::Bool>("/flight_land", 1);
         acc_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/acc_cmd", 1);
         control_update_timer = nh.createTimer(ros::Duration(0.01), &TripleAxisController::controlUpdate, this);
     }
