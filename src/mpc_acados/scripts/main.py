@@ -26,15 +26,15 @@ class AcadosTrackingNode:
         # 发布 x 轴输入消息：消息类型为 std_msgs/Float64
         self.x_pub = rospy.Publisher("/input_x_axis", Float64, queue_size=1)
         # 发布估计状态（hat_x）消息：消息类型为 std_msgs/Float64MultiArray
-        self.pub_hat_x = rospy.Publisher("/hat_x_topic", Float64MultiArray, queue_size=100)
+        self.pub_hat_x = rospy.Publisher("/hat_x_topic", Float64MultiArray, queue_size=1)
 
         self.state_timer = rospy.Timer(rospy.Duration(0.05), self.timer_callback)
 
         # 如果需要，也可订阅其他消息（例如 ground truth 消息），示例如下：
         self.ground_truth_sub = rospy.Subscriber("/mavros/local_position/velocity_local",
-                                                 TwistStamped, self.ground_truth_callback, queue_size=10)
+                                                 TwistStamped, self.ground_truth_callback, queue_size=1)
         self.ground_truth_pose_sub = rospy.Subscriber("/vrpn_client_node/MCServer/5/pose",
-                                                      PoseStamped, self.ground_truth_pose_callback, queue_size=10)
+                                                      PoseStamped, self.ground_truth_pose_callback, queue_size=1)
 
         self.x0 = np.zeros(self.model.x.size()[0])
         self.u0 = np.zeros(self.model.u.size()[0])

@@ -31,7 +31,7 @@ private:
     const double sigma_w3_inv = 1.0;
     double k_i = -3;
     double k_p = -1.5;
-    double k_d = 0; 
+    double k_d = 0;
     const double T_c = 0.01;
     const double x_bias = -1;
     const double y_bias = -0.2;
@@ -109,7 +109,7 @@ public:
             delta_u = T_c * (k_i * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu)) + k_p * ((1 - trust_param_y2) * (y2_APO_fast - mu_p) + trust_param_y2 * (y2_derivative_sampling - mu_p)) + k_d * ((1 - trust_param_y3) * (y3_APO_fast - mu_pp) + trust_param_y3 * (y3_real_slow - mu_pp)));
             u = double(u_last - delta_u);
         }
-        if (which_axis == 2) 
+        if (which_axis == 2)
         {
             if (abs(u) >= 0.4)
             {
@@ -372,7 +372,7 @@ public:
         {
             loss_target = true;
         }
-        if (loss_or_not == 0 && loss_target == true) 
+        if (loss_or_not == 0 && loss_target == true)
         {
             loss_target = false;
             first_time_in_fun = true;
@@ -427,7 +427,7 @@ public:
 
     void StateCallback(const std_msgs::Int32::ConstPtr &msg)
     {
-        if (msg->data != 3) 
+        if (msg->data != 3)
         {
             u = 0;
             u_last = 0;
@@ -473,7 +473,7 @@ public:
     {
         controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
         controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 0, 1);
-        controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 0, 2); 
+        controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 0, 2);
     }
 
     void ground_truth_callback(const geometry_msgs::TwistStamped::ConstPtr &msg)

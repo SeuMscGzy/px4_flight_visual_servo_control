@@ -21,10 +21,6 @@ class LowPassFilter:
 #############################################
 class ButterworthLowPassFilter:
     def __init__(self, fs, fc):
-        """
-        fs: 采样频率
-        fc: 截止频率
-        """
         self.fs = fs
         self.fc = fc
         # 存储前两次的输入与输出（初始值均为0）
@@ -116,12 +112,6 @@ class MyController:
         rospy.loginfo("MyController initialized.")
 
     def callback(self, msg):
-        """
-        回调函数：
-          - 从 /point_with_fixed_delay 话题接收 Float64MultiArray 消息
-          - 提取前3个数据作为位置信息，索引4（第五个数据）作为 loss_or_not 标识
-          - 调用 cal_single_axis_ctrl_input 处理数据
-        """
         data = msg.data
         if len(data) < 5:
             rospy.logerr("接收到的数据长度不足：{}".format(len(data)))
@@ -130,7 +120,7 @@ class MyController:
         # 取出前3个数据作为位置信息
         xyz_1 = np.array([data[0], data[1], data[2]])
         loss_or_not_val = data[4]
-        self.cal_single_axis_ctrl_input(xyz_1, loss_or_not_val)
+        self.cal_single_axis_ctrl_input(self, xyz_1, loss_or_not_val)
 
     def cal_single_axis_ctrl_input(self, xyz_1, loss_or_not):
         """

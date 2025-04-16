@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>aic_plus_apo</name>
+  <name>RAID-AgiVS_without_d_term</name>
   <version>0.0.0</version>
-  <description>The aic_plus_apo package</description>
+  <description>The RAID-AgiVS_without_d_term</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->

@@ -60,7 +60,6 @@ ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
 
   // ROS组件初始化
   point_pub_ = nh_.advertise<std_msgs::Float64MultiArray>("/point_with_fixed_delay", 1, true);
-  cv_image_pub = nh_.advertise<sensor_msgs::Image>("/camera/image", 1);
   odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("/mavros/local_position/odom", 1, &ObjectDetector::odomCallback, this, ros::TransportHints().tcpNoDelay());
   image_pub = nh.advertise<sensor_msgs::Image>("camera/image", 1);
   timer = nh_.createTimer(ros::Duration(0.05), &ObjectDetector::timerCallback, this);

@@ -23,7 +23,7 @@ find_package(iir REQUIRED)
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 catkin_package(
-  INCLUDE_DIRS include LIBRARIES CATKIN_DEPENDS roscpp rospy std_msgs px4ctrl quadrotor_msgs uav_utils
+  INCLUDE_DIRS LIBRARIES CATKIN_DEPENDS roscpp rospy std_msgs px4ctrl quadrotor_msgs uav_utils
 )
 include_directories(
   ${catkin_INCLUDE_DIRS}
