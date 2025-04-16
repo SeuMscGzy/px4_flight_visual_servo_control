@@ -14,18 +14,21 @@
 #include <geometry_msgs/AccelStamped.h>
 #include <nav_msgs/Odometry.h>
 #include <Iir.h>
+#include <iostream>
+#include <fstream>
+#include <ctime>
 using namespace std;
 
 class PID2Controller
 {
 private:
-    const double k_i = -0.2;
-    const double k_p = -4;
-    const double k_d = -4;
+    const double k_i = 0.2;
+    const double k_p = 4;
+    const double k_d = 4;
     const double T_c = 0.05;
-    double x_bias = -0;
-    double y_bias = -0.1;
-    double z_bias = -0.2;
+    double x_bias = -1;
+    double y_bias = 0;
+    double z_bias = -0.1;
     double y1_real_bias = 0;
     ros::NodeHandle nh;
 
@@ -33,7 +36,6 @@ public:
     PID2Controller() // 构造函数
     {
     }
-
 
     double adjustBias(double value, int which_axis, bool use_bias) // which_axis: 0 for x, 1 for y, 2 for z
     {
@@ -251,6 +253,8 @@ public:
 class TripleAxisController
 {
 private:
+    std::ofstream output_file; // 用于写入数据的文件
+    int iterations;            // 迭代次数
     MyController controllerX, controllerY, controllerZ;
     ros::NodeHandle nh;
     ros::Subscriber sub, ground_truth_sub, ground_truth_second_sub, ground_truth_pose_sub;
@@ -265,8 +269,9 @@ private:
 public:
     // 构造函数
     TripleAxisController()
-        : nh("~"), des_yaw(0)
+        : nh("~"), des_yaw(0), iterations(0)
     {
+        output_file.open("execution_times.csv");
         x_pub = nh.advertise<std_msgs::Float64>("/input_x_axis", 100);
         sub = nh.subscribe("/point_with_fixed_delay", 1, &TripleAxisController::callback, this);
         ground_truth_sub = nh.subscribe("/mavros/local_position/velocity_local", 10, &TripleAxisController::ground_truth_callback, this);
@@ -280,9 +285,27 @@ public:
         // 更新每个轴的控制器
         des_yaw = 0;
 
+        std::clock_t start = std::clock();
         controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
-        controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 1, 1);
-        controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2); // 定高跟踪
+        controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 0, 1);
+        controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2); // Constant height tracking
+        std::clock_t end = std::clock();
+        // 计算并输出执行时间（以毫秒为单位）
+        double duration = 1000 * double(end - start) / CLOCKS_PER_SEC;
+        cout << iterations << endl;
+        if (iterations == 0)
+        {
+            output_file << "Iterations,Execution Time (ms)\n"; // 写入表头
+        }
+        else if (iterations <= 5000)
+        {
+            output_file << iterations << "," << duration << "\n";
+        }
+        else
+        {
+            output_file.close(); // 关闭文件
+        }
+        iterations++;
 
         std_msgs::Float64 input_data_msg;
         input_data_msg.data = controllerX.u;
