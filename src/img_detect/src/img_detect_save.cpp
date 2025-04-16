@@ -1,4 +1,4 @@
-/*#include <visp3/core/vpConfig.h>
+#include <visp3/core/vpConfig.h>
 #include <visp3/sensor/vpV4l2Grabber.h>
 #include <visp3/sensor/vp1394CMUGrabber.h>
 #include <visp3/sensor/vp1394TwoGrabber.h>
@@ -308,4 +308,4 @@ int main(int argc, char **argv)
 #endif
 #endif
     return EXIT_SUCCESS;
-}*/
+}

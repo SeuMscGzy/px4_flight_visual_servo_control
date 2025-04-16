@@ -14,7 +14,11 @@ find_package(catkin REQUIRED COMPONENTS
   cv_bridge
   image_transport
 )
-find_package(apriltag REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(APRILTAG REQUIRED apriltag)
+
+include_directories(${APRILTAG_INCLUDE_DIRS})
+link_directories(${APRILTAG_LIBRARY_DIRS})
 find_package(VISP REQUIRED)
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -121,9 +125,7 @@ catkin_package(
 include_directories(
 # include
   ${catkin_INCLUDE_DIRS}
-  /usr/local/include/acado
 )
-link_directories(/usr/local/lib)
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
@@ -157,8 +159,7 @@ target_link_libraries(img_detect
 
  target_link_libraries(img_detect
  ${VISP_LIBRARIES} 
- apriltag
- acado_toolkit_s
+ ${APRILTAG_LIBRARIES}
 )
 
 #############

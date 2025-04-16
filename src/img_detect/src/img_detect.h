@@ -22,7 +22,19 @@
 #include <vector>
 #include <stdexcept>
 #include <librealsense2/rs.hpp>
-#include <acado_toolkit.hpp>
+#include <visp3/core/vpConfig.h>
+#include <visp3/sensor/vpV4l2Grabber.h>
+#include <visp3/sensor/vp1394CMUGrabber.h>
+#include <visp3/sensor/vp1394TwoGrabber.h>
+#include <visp3/sensor/vpFlyCaptureGrabber.h>
+#include <visp3/sensor/vpRealSense2.h>
+#include <visp3/detection/vpDetectorAprilTag.h>
+#include <visp3/gui/vpDisplayGDI.h>
+#include <visp3/core/vpImageConvert.h>
+#include <visp3/gui/vpDisplayX.h>
+#include <visp3/core/vpXmlParserCamera.h>
+#include <visp3/core/vpImageTools.h>
+#include <visp3/core/vpImageFilter.h>
 using namespace std;
 using namespace std::chrono;
 
@@ -37,9 +49,6 @@ public:
     ros::Timer timer;
     thread worker_thread;
 
-    rs2::pipeline pipe;
-    rs2::config cfg;
-
     std::atomic<bool> stop_thread;
     std::atomic<bool> processing;
     std::mutex data_mutex;
@@ -52,17 +61,13 @@ public:
     Eigen::Matrix3d R_i2c;
     Eigen::Matrix3d R_w2c;
 
+    vpRealSense2 g;
+    rs2::config config;
+    vpCameraParameters cam;
+    vpDetectorAprilTag tag_detector;
     // 将 cv::Mat rvec 和 tvec 作为类成员变量用于复用内存
-    cv::Mat rvec_;
-    cv::Mat tvec_;
 
     std_msgs::Float64MultiArray point_;
-    apriltag_detector_t *td;
-    apriltag_family_t *tf;
-    cv::Mat cameraMatrix, distCoeffs;
-    unordered_map<int, double> tag_sizes;
-    unordered_map<int, vector<cv::Point3d>> cached_obj_pts_;
-
     // 构造函数与析构函数
     ObjectDetector(ros::NodeHandle &nh);
     ~ObjectDetector();
