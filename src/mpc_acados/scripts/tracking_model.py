@@ -40,7 +40,7 @@ def tracking_model():
     #   dot(vel) = u
     f_expl = vertcat(
         relative_vel,  # 位置导数等于速度
-        u     # 速度导数等于控制输入（加速度）
+        -u     # 速度导数等于控制输入（加速度）
     )
     # 隐式表达式： xdot - f_expl = 0
     f_impl_expr = xdot - f_expl

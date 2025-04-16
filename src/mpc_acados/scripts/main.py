@@ -9,8 +9,15 @@ from std_msgs.msg import Float64, Float64MultiArray
 from geometry_msgs.msg import TwistStamped, PoseStamped
 from quadrotor_msgs.msg import PositionCommand, TakeoffLand
 import time
+from openpyxl import Workbook
 class AcadosTrackingNode:
     def __init__(self):
+        #self.filename = "ocp_solution_times.xlsx"
+        #self.iterations = 0
+        #self.wb = Workbook()
+        #self.ws = self.wb.active
+        #self.ws.title = "OCP 求解时间"
+        #self.ws.append(["Iteration", "OCP 求解时间 (秒)"])  # 添加标题行
 
         self.filter1 = MyController()
         # 设置 acados 参数（预测时域 Tf 与离散节点 N，根据实际需求调整）
@@ -24,7 +31,7 @@ class AcadosTrackingNode:
         # 发布控制输入话题：消息类型为 quadrotor_msgs/PositionCommand
         self.control_pub = rospy.Publisher("/acc_cmd", PositionCommand, queue_size=1)
         # 发布 x 轴输入消息：消息类型为 std_msgs/Float64
-        self.x_pub = rospy.Publisher("/input_x_axis", Float64, queue_size=1)
+        #self.x_pub = rospy.Publisher("/input_x_axis", Float64, queue_size=1)
         # 发布估计状态（hat_x）消息：消息类型为 std_msgs/Float64MultiArray
         self.pub_hat_x = rospy.Publisher("/hat_x_topic", Float64MultiArray, queue_size=1)
 
@@ -108,13 +115,18 @@ class AcadosTrackingNode:
 
 
     def timer_callback(self, event):
-        self.x0 = np.array([self.filter1.x_real, self.filter1.y_real, self.filter1.z_real, self.filter1.x_filtered_deri, self.filter1.y_filtered_deri, self.filter1.z_filtered_deri])
+        self.x0 = np.array([self.filter1.x_real - 1, self.filter1.y_real, self.filter1.z_real - 0.1, self.filter1.x_filtered_deri, self.filter1.y_filtered_deri, self.filter1.z_filtered_deri])
         # 使用 solve_for_x0() 更新初始状态并求解 OCP（该函数内部包含求解步骤）
-        time_start = time.perf_counter()
+        #time_start = time.perf_counter()
         self.u0 = self.acados_solver.solve_for_x0(self.x0)
-        time_end = time.perf_counter()
-        rospy.loginfo("OCP 求解时间: {:.6f} 秒".format(time_end - time_start))
-
+        #time_end = time.perf_counter()
+        #duration = time_end - time_start
+        #if(self.iterations<=5000):
+        #    self.ws.append([self.iterations, 1000 * duration])
+        #else :
+        #    self.wb.save(self.filename)
+        #self.iterations += 1
+        #rospy.loginfo(self.iterations)
         self.publish_control_and_hat_x()
 
     def ground_truth_callback(self, msg):

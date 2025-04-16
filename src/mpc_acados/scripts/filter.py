@@ -120,7 +120,7 @@ class MyController:
         # 取出前3个数据作为位置信息
         xyz_1 = np.array([data[0], data[1], data[2]])
         loss_or_not_val = data[4]
-        self.cal_single_axis_ctrl_input(self, xyz_1, loss_or_not_val)
+        self.cal_single_axis_ctrl_input(xyz_1, loss_or_not_val)
 
     def cal_single_axis_ctrl_input(self, xyz_1, loss_or_not):
         """

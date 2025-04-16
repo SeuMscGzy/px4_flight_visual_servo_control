@@ -33,13 +33,13 @@ def acados_settings(Tf, N):
     ocp.dims.N = N
 
     # set cost 
-    Q = np.diag([3, 3, 3, 1 , 1, 1])
+    Q = np.diag([3, 3, 3, 1, 1, 1])
     R = 0.3 * np.eye(nu)
 
     Qe = Q
 
-    ocp.cost.cost_type   = "NONLINEAR_LS"
-    ocp.cost.cost_type_e = "NONLINEAR_LS"
+    ocp.cost.cost_type   = "LINEAR_LS"
+    ocp.cost.cost_type_e = "LINEAR_LS"
 
     # unscale = N / Tf
     # ocp.cost.W   = unscale * scipy.linalg.block_diag(Q,R)

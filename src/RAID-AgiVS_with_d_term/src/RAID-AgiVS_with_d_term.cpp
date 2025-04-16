@@ -2,7 +2,6 @@
 #include <eigen3/Eigen/Dense>
 #include <std_msgs/Float64.h>
 #include <std_msgs/Float64MultiArray.h>
-#include <vector>
 #include <cmath>
 #include <quadrotor_msgs/PositionCommand.h>
 #include <quadrotor_msgs/TakeoffLand.h>
@@ -15,6 +14,10 @@
 #include <nav_msgs/Odometry.h>
 #include <Iir.h>
 #include <std_msgs/Empty.h>
+#include <iostream>
+#include <fstream>
+#include <ctime>
+#include <vector>
 using namespace std;
 
 class AIC2Controller
@@ -377,6 +380,8 @@ public:
 class TripleAxisController
 {
 private:
+    std::ofstream output_file; // 用于写入数据的文件
+    int iterations;            // 迭代次数
     MyController controllerX, controllerY, controllerZ;
     ros::NodeHandle nh;
     ros::Subscriber sub, ground_truth_sub, ground_truth_second_sub, ground_truth_pose_sub;
@@ -391,8 +396,9 @@ private:
 
 public:
     TripleAxisController()
-        : nh("~"), des_yaw(0)
+        : nh("~"), des_yaw(0), iterations(0)
     {
+        output_file.open("execution_times.csv");
         sub = nh.subscribe("/point_with_fixed_delay", 1, &TripleAxisController::callback, this, ros::TransportHints().tcpNoDelay());
         ground_truth_sub = nh.subscribe("/mavros/local_position/velocity_local", 10, &TripleAxisController::ground_truth_callback, this);
         ground_truth_pose_sub = nh.subscribe("/vrpn_client_node/MCServer/5/pose", 10, &TripleAxisController::ground_truth_pose_callback, this);
@@ -407,9 +413,27 @@ public:
         // Update the controller for each axis
         last_time = ros::Time::now().toSec();
         des_yaw = msg->data[5];
+        std::clock_t start = std::clock();
         controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
         controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 0, 1);
         controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2); // Constant height tracking
+        std::clock_t end = std::clock();
+        // 计算并输出执行时间（以毫秒为单位）
+        double duration = 1000 * double(end - start) / CLOCKS_PER_SEC;
+        cout << iterations << endl;
+        if (iterations == 0)
+        {
+            output_file << "Iterations,Execution Time (ms)\n"; // 写入表头
+        }
+        else if (iterations <= 10000)
+        {
+            output_file << iterations << "," << duration << "\n";
+        }
+        else
+        {
+            output_file.close(); // 关闭文件
+        }
+        iterations++;
     }
 
     void ground_truth_callback(const geometry_msgs::TwistStamped::ConstPtr &msg)
