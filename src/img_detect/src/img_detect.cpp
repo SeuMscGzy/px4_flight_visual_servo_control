@@ -43,28 +43,17 @@ void flipImage(vpImage<T> &src, vpImage<T> &dst, int flipCode)
   // cout << "1" << endl;
 }
 // 常量定义
-constexpr double PROCESSING_LATENCY = 0.045; // 40ms处理延迟
+constexpr double PROCESSING_LATENCY = 0.04; // 40ms处理延迟
 const Eigen::Vector3d POS_OFFSET{0.00625, -0.08892, 0.06430};
-constexpr double DEFAULT_FX = 615.1674805;
-constexpr double DEFAULT_FY = 615.1675415;
-constexpr double DEFAULT_CX = 312.1889954;
-constexpr double DEFAULT_CY = 243.4373779;
 ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
     : nh_(nh), stop_thread(false), processing(false),
       lost_target(true), desired_yaw(0)
 {
-  // 参数服务器配置
-  double fx, fy, cx, cy;
-  nh_.param("/camera/fx", fx, DEFAULT_FX);
-  nh_.param("/camera/fy", fy, DEFAULT_FY);
-  nh_.param("/camera/cx", cx, DEFAULT_CX);
-  nh_.param("/camera/cy", cy, DEFAULT_CY);
-
   config.disable_stream(RS2_STREAM_DEPTH);
   config.disable_stream(RS2_STREAM_INFRARED);
   config.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_RGBA8, 60);
   g.open(config);
-  cam.initPersProjWithoutDistortion(615.1674805, 615.1675415, 312.1889954, 243.4373779);
+  cam = g.getCameraParameters(RS2_STREAM_COLOR, vpCameraParameters::perspectiveProjWithoutDistortion);
   tag_detector.setAprilTagQuadDecimate(1.0);
   tag_detector.setAprilTagPoseEstimationMethod(vpDetectorAprilTag::HOMOGRAPHY_VIRTUAL_VS);
   tag_detector.setAprilTagNbThreads(4);

@@ -14,6 +14,9 @@
 #include <geometry_msgs/AccelStamped.h>
 #include <nav_msgs/Odometry.h>
 #include <Iir.h>
+#include <iostream>
+#include <fstream>
+#include <ctime>
 using namespace std;
 
 class SingleAIC2Controller
@@ -33,9 +36,9 @@ private:
     const double k_p = -5;
     const double k_d = -3.7;
     const double T_c = 0.05;
-    double x_bias = -0.3;
-    double y_bias = -0.3;
-    double z_bias = 1;
+    double x_bias = -1;
+    double y_bias = 0;
+    double z_bias = -0.1;
     double y1_real_bias = 0;
     ros::NodeHandle nh;
     ros::Subscriber number_sub;
@@ -300,6 +303,8 @@ public:
 class TripleAxisController
 {
 private:
+    std::ofstream output_file; // 用于写入数据的文件
+    int iterations;            // 迭代次数
     MyController controllerX, controllerY, controllerZ;
     ros::NodeHandle nh;
     ros::Subscriber sub, ground_truth_sub, ground_truth_second_sub, ground_truth_pose_sub;
@@ -314,8 +319,9 @@ private:
 public:
     // 构造函数
     TripleAxisController()
-        : nh("~"), des_yaw(0)
+        : nh("~"), des_yaw(0), iterations(0)
     {
+        output_file.open("execution_times.csv");
         sub = nh.subscribe("/point_with_fixed_delay", 1, &TripleAxisController::callback, this);
         ground_truth_sub = nh.subscribe("/mavros/local_position/velocity_local", 10, &TripleAxisController::ground_truth_callback, this);
         ground_truth_pose_sub = nh.subscribe("/vrpn_client_node/MCServer/5/pose", 10, &TripleAxisController::ground_truth_pose_callback, this);
@@ -331,30 +337,29 @@ public:
         // cout << "运行间隔时间: " << 1000 * (ros::Time::now().toSec() - last_time) << " ms" << endl;
         last_time = ros::Time::now().toSec();
         des_yaw = msg->data[5];
-        if (msg->data[0] > 0.15 || msg->data[1] > 0.15)
+
+        std::clock_t start = std::clock();
+        controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
+        controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 0, 1);
+        controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2); // Constant height tracking
+        std::clock_t end = std::clock();
+        // 计算并输出执行时间（以毫秒为单位）
+        double duration = 1000 * double(end - start) / CLOCKS_PER_SEC;
+        cout << iterations << endl;
+        if (iterations == 0)
         {
-            controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
-            controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 1, 1);
-            controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2); // 定高跟踪
-            std_msgs::Bool land_msg;
-            land_msg.data = false;
-            pub_land.publish(land_msg);
+            output_file << "Iterations,Execution Time (ms)\n"; // 写入表头
+        }
+        else if (iterations <= 5000)
+        {
+            output_file << iterations << "," << duration << "\n";
         }
         else
         {
-            controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
-            controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 1, 1);
-            controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 0, 2); // 闭环着陆
-            if ((msg->data[2] < 0.15 && msg->data[4] == 0 && controllerX.px4_state == 3) || keep_in_land)
-            {
-                // 发送强制着陆指令，因为可能快要看不到目标了，开环近距离着陆
-                keep_in_land = true;
-                std_msgs::Bool land_msg;
-                land_msg.data = true;
-                pub_land.publish(land_msg);
-                cout << "land message sent" << endl;
-            }
+            output_file.close(); // 关闭文件
         }
+        iterations++;
+
         acc_msg.position.x = 0;
         acc_msg.position.y = 0;
         acc_msg.position.z = 0;

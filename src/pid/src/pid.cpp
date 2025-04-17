@@ -285,27 +285,27 @@ public:
         // 更新每个轴的控制器
         des_yaw = 0;
 
-        std::clock_t start = std::clock();
+        // std::clock_t start = std::clock();
         controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
         controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 0, 1);
         controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2); // Constant height tracking
-        std::clock_t end = std::clock();
-        // 计算并输出执行时间（以毫秒为单位）
-        double duration = 1000 * double(end - start) / CLOCKS_PER_SEC;
-        cout << iterations << endl;
-        if (iterations == 0)
-        {
-            output_file << "Iterations,Execution Time (ms)\n"; // 写入表头
-        }
-        else if (iterations <= 5000)
-        {
-            output_file << iterations << "," << duration << "\n";
-        }
-        else
-        {
-            output_file.close(); // 关闭文件
-        }
-        iterations++;
+        // std::clock_t end = std::clock();
+        //  计算并输出执行时间（以毫秒为单位）
+        // double duration = 1000 * double(end - start) / CLOCKS_PER_SEC;
+        // cout << iterations << endl;
+        // if (iterations == 0)
+        //{
+        // output_file << "Iterations,Execution Time (ms)\n"; // 写入表头
+        // }
+        // else if (iterations <= 5000)
+        //{
+        //   output_file << iterations << "," << duration << "\n";
+        // }
+        // else
+        //{
+        //  output_file.close(); // 关闭文件
+        //// }
+        // iterations++;
 
         std_msgs::Float64 input_data_msg;
         input_data_msg.data = controllerX.u;
@@ -330,7 +330,18 @@ public:
 
         std_msgs::Float64MultiArray msg1;
         msg1.data.resize(27);
-
+        for (int i = 0; i < 2; i++)
+        {
+            msg1.data[i] = 0;
+        }
+        for (int i = 9; i < 11; i++)
+        {
+            msg1.data[i] = 0;
+        }
+        for (int i = 18; i < 20; i++)
+        {
+            msg1.data[i] = 0;
+        }
         msg1.data[2] = controllerX.u;
         msg1.data[3] = controllerX.y_real;
         msg1.data[4] = -ground_truth_first_deri_x;

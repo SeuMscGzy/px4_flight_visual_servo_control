@@ -12,7 +12,6 @@
 #include <geometry_msgs/TwistStamped.h>
 #include <geometry_msgs/AccelStamped.h>
 #include <nav_msgs/Odometry.h>
-#include <Iir.h>
 #include <std_msgs/Empty.h>
 #include <iostream>
 #include <fstream>
@@ -20,37 +19,24 @@
 #include <vector>
 using namespace std;
 
-class AIC2Controller
+class PIDController
 {
 private:
-    const double e_1 = 1;
-    const double e_2 = 1;
-    const double k_l = 1.0;
-    const double sigma_z1_inv = 1.0;
-    const double sigma_z2_inv = 1.0;
-    const double sigma_w1_inv = 1.0;
-    const double sigma_w2_inv = 1.0;
-    /*    double k_i = -0.5;
-    double k_p = -5;
-    double k_d = -3;*/
-    double k_i = -0.5;
-    double k_p = -5.1;
-    double k_d = -3;
+    double k_i = 0.5;
+    double k_p = 4;
+    double k_d = 3;
     const double T_c = 0.01;
     double x_bias = -1;
     double y_bias = 0;
     double z_bias = -0.1;
-    double y1_APO_fast_bias = 0;
-    double y1_real_bias = 0;
+    double y1_fast_bias = 0;
+    double integral_error = 0;
     ros::NodeHandle nh;
-    std::vector<double> trust_array_y1 = {1, 0.75, 0.65, 0.55, 0.45};
-    std::vector<double> trust_array_y2 = {0.5, 0.5, 0.5, 0.5, 0.5};
 
 public:
-    AIC2Controller() // 构造函数
+    PIDController() // 构造函数
     {
     }
-
 
     double adjustBias(double value, int which_axis, bool use_bias) // which_axis: 0 for x, 1 for y, 2 for z
     {
@@ -75,9 +61,14 @@ public:
         }
     }
 
+    void setIntegralZero()
+    {
+        integral_error = 0;
+    }
+
     double limitControl(double controlValue, int which_axis)
     {
-        double limit = (which_axis != 0) ? 3 : 3; // Limit is 3 for y and z, 1.5 for x axis.
+        double limit = (which_axis != 0) ? 3 : 4; // Limit is 3 for y and z, 1.5 for x axis.
         if (abs(controlValue) >= limit)
         {
             controlValue = limit * controlValue / abs(controlValue); // Apply limit
@@ -95,33 +86,13 @@ public:
         return IntegralValue;
     }
 
-    void computeControl(int time_count, double y1_real_slow, double y1_APO_fast, double y2_derivative_sampling, double y2_APO_fast, double &mu_last, double &mu_p_last, double &u_last, double &u, double &mu, double &mu_p, bool use_bias, int which_axis)
+    void computeControl(double y1_fast, double y2_fast, bool use_bias, int which_axis, double &u)
     {
-        y1_APO_fast_bias = adjustBias(y1_APO_fast, which_axis, use_bias);
-        y1_real_bias = adjustBias(y1_real_slow, which_axis, use_bias);
-        double trust_param_y1 = trust_array_y1[time_count];
-        double trust_param_y2 = trust_array_y2[time_count];
-        mu = double(mu_last + T_c * (mu_p_last + (1 - trust_param_y1) * k_l * sigma_z1_inv * (y1_APO_fast_bias - mu_last) + trust_param_y1 * k_l * sigma_z1_inv * (y1_real_bias - mu_last) - k_l * sigma_w1_inv * e_1 * (mu_p_last + e_1 * mu_last)));
-        mu_p = double(mu_p_last + T_c * ((1 - trust_param_y2) * k_l * sigma_z2_inv * (y2_APO_fast - mu_p_last) + trust_param_y2 * k_l * sigma_z2_inv * (y2_derivative_sampling - mu_p_last) - k_l * sigma_w1_inv * (mu_p_last + e_1 * mu_last) - k_l * sigma_w2_inv * e_2 * e_2 * mu_p_last));
-        mu_last = mu;
-        mu_p_last = mu_p;
-        u_last = double(u_last - T_c * (k_i * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu)) - k_p * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu))));
-        u_last = limitIntegral(u_last, which_axis);
-        u = u_last - k_d * (1 - trust_param_y2) * y2_APO_fast - k_d * trust_param_y2 * y2_derivative_sampling;
+        y1_fast_bias = adjustBias(y1_fast, which_axis, use_bias);
+        integral_error = integral_error + y1_fast_bias * T_c;
+        integral_error = limitIntegral(integral_error, which_axis);
+        u = k_i * integral_error + k_p * y1_fast_bias + k_d * y2_fast;
         u = limitControl(u, which_axis);
-        // cout << which_axis << ": " << u_last << " " << mu << " " << mu_p << " " << u << endl;
-        /*if (which_axis == 0)
-        {
-            cout << "x_bias: " << x_bias << endl;
-        }
-        else if (which_axis == 1)
-        {
-            cout << "y_bias: " << y_bias << endl;
-        }
-        else
-        {
-            cout << "z_bias: " << z_bias << endl;
-        }*/
     }
 };
 
@@ -144,49 +115,6 @@ public:
     }
 };
 
-class ButterworthLowPassFilter
-{
-private:
-    double fs; // sampling frequency
-    double fc; // cut-off frequency
-    double a0, a1, a2, b1, b2;
-    double prevX1, prevX2, prevY1, prevY2;
-
-public:
-    ButterworthLowPassFilter(double sampleRate, double cutoffFrequency)
-        : fs(sampleRate), fc(cutoffFrequency), prevX1(0), prevX2(0), prevY1(0), prevY2(0)
-    {
-        calculateCoefficients();
-    }
-
-    void calculateCoefficients()
-    {
-        double ita = 1.0 / tan(M_PI * fc / fs);
-        double q = sqrt(2.0);
-        double a0_temp = 1.0 / (1.0 + q * ita + ita * ita);
-        a0 = a0_temp;
-        a1 = 2 * a0_temp;
-        a2 = a0_temp;
-        b1 = 2.0 * a0_temp * (1 - ita * ita);
-        b2 = a0_temp * (1 - q * ita + ita * ita);
-    }
-
-    double filter(double input)
-    {
-        double output = a0 * input + a1 * prevX1 + a2 * prevX2 - b1 * prevY1 - b2 * prevY2;
-        prevX2 = prevX1;
-        prevX1 = input;
-        prevY2 = prevY1;
-        prevY1 = output;
-        return output;
-    }
-
-    void reset()
-    {
-        prevX1 = prevX2 = prevY1 = prevY2 = 0;
-    }
-};
-
 class MyController
 {
 private:
@@ -194,20 +122,14 @@ private:
     Eigen::Matrix2d A_bar, A0;
     double u;
     double u_last;
-    double predict_y, y_real, y_real_last;
-    double y_real_derivative, y_filtered_deri;
-    double mu, mu_p, mu_last, mu_p_last;
-    double time_now, time_last, time_pass;
-    int count, timer_count;
+    double y_real;
+    int timer_count;
     bool first_time_in_fun, loss_target, use_bias_;
     ros::NodeHandle nh;
     ros::Timer timer;
 
-    // ButterworthLowPassFilter filter_for_deri; // 二阶巴特沃斯LPF
     LowPassFilter filter_for_img;
-    AIC2Controller aic2controller;
-    // Iir::Butterworth::LowPass<4> filter_4_for_img;
-    Iir::Butterworth::LowPass<2> filter_4_for_deri;
+    PIDController pidcontroller;
     ros::Subscriber px4_state_sub;
     friend class TripleAxisController;
     double loss_or_not_;
@@ -221,41 +143,28 @@ public:
           nh("~"),
           px4_state(1),
           hat_x(Eigen::Vector2d::Zero()),
-          predict_y(0.0),
           y_real(0.0),
           u(0.0),
           u_last(0.0),
-          y_real_last(0.0),
-          y_real_derivative(0.0),
-          time_now(0.0),
-          time_last(0.0),
-          time_pass(0.0),
-          mu(0.0),
-          mu_p(0.0),
-          mu_last(0.0),
-          mu_p_last(0.0),
           timer_count(0),
-          filter_for_img(0.9),
-          // filter_for_deri(20, 3),
-          y_filtered_deri(0),
+          filter_for_img(0.95),
           loss_target(true),
           loss_or_not_(1),
           use_bias_(1),
           which_axis_(0),
           first_time_in_fun(true)
     {
-        A_bar << 0.518572754477203, 0.00740818220681718,
-            -6.66736398613546, 0.963063686886233;
-        B_bar << 0,
-            0;
-        C_bar << 0.481427245526137,
-            6.66736398622287;
+        A_bar << 0.563905116202294, 0.00767209146671299,
+            -5.38580820963311, 0.970525963938104;
+        B_bar << 4.48259305755374e-05,
+            0.00995822807882039;
+        C_bar << 0.436094883797706,
+            5.38580820963311;
         A0 << 1, 0.0100000000000000,
             0, 1;
         B0 << 5.00000000000000e-05,
             0.0100000000000000;
         px4_state_sub = nh.subscribe("/px4_state_pub", 1, &MyController::StateCallback, this, ros::TransportHints().tcpNoDelay());
-        filter_4_for_deri.setup(20, 2.7);
     }
 
     void cal_single_axis_ctrl_input(double measure_single_axis, double loss_or_not, bool use_bias, int which_axis)
@@ -265,21 +174,10 @@ public:
         which_axis_ = which_axis;
         y_real = measure_single_axis;
         y_real = filter_for_img.filter(y_real);
-        // y_real = filter_4_for_img.filter(y_real);
-
-        time_now = ros::Time::now().toSec();
-        time_pass = time_now - time_last;
         function(loss_or_not_, use_bias_, which_axis_);
-
-        y_real_derivative = (y_real - y_real_last) / time_pass; // 0.05 seconds = 50ms
-        // y_filtered_deri = filter_for_deri.filter(y_real_derivative);
-        y_filtered_deri = filter_4_for_deri.filter(y_real_derivative);
-
         // Update the last values for the next iteration
-        y_real_last = y_real;
         timer_count++;
         timer = nh.createTimer(ros::Duration(0.01), &MyController::timerCallback, this);
-        time_last = time_now;
     }
 
     void timerCallback(const ros::TimerEvent &)
@@ -306,45 +204,39 @@ public:
         }
         if (first_time_in_fun)
         {
-            time_pass = 0.05;
-            y_real_last = y_real;
             first_time_in_fun = false;
-            predict_y = y_real;
             hat_x(0) = y_real;
-            aic2controller.computeControl(timer_count, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, mu, mu_p, use_bias, which_axis);
+            hat_x(1) = 0;
+            pidcontroller.setIntegralZero();
+            pidcontroller.computeControl(hat_x(0), hat_x(1), use_bias, which_axis, u);
         }
         else
         {
             if (timer_count == 0)
             {
-                predict_y = y_real;
-                u = 0;
-                hat_x = A_bar * hat_x_last + B0 * u + C_bar * predict_y;
-                aic2controller.computeControl(timer_count, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, mu, mu_p, use_bias, which_axis);
+                u_last = 0;
+                hat_x = A_bar * hat_x_last + B0 * u_last + C_bar * y_real;
+                pidcontroller.computeControl(hat_x(0), hat_x(1), use_bias, which_axis, u);
             }
             else
             {
-                Eigen::Vector2d coeff(1, 0);
-                u = 0;
-                predict_y = coeff.transpose() * (A0 * hat_x_last + B0 * u);
-                hat_x = A_bar * hat_x_last + B_bar * u + C_bar * predict_y;
-                aic2controller.computeControl(timer_count, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, mu, mu_p, use_bias, which_axis);
+                u_last = 0;
+                hat_x = A0 * hat_x_last + B0 * u_last;
+                pidcontroller.computeControl(hat_x(0), hat_x(1), use_bias, which_axis, u);
             }
         }
         // Update last values for the next iteration
         hat_x_last = hat_x;
+        u_last = u;
     }
 
     void StateCallback(const std_msgs::Int32::ConstPtr &msg)
     {
         if (msg->data != 3) // When not in cmd mode, the control amount is 0.
         {
+            pidcontroller.setIntegralZero();
             u = 0;
             u_last = 0;
-            mu = 0;
-            mu_p = 0;
-            mu_last = 0;
-            mu_p_last = 0;
         }
     }
 };
@@ -356,15 +248,13 @@ private:
     int iterations;            // 迭代次数
     MyController controllerX, controllerY, controllerZ;
     ros::NodeHandle nh;
-    ros::Subscriber sub, ground_truth_sub, ground_truth_second_sub, ground_truth_pose_sub;
-    ros::Publisher pub_hat_x, acc_cmd_pub, pub_land;
+    ros::Subscriber sub, ground_truth_sub, ground_truth_pose_sub;
+    ros::Publisher pub_hat_x, acc_cmd_pub;
     quadrotor_msgs::PositionCommand acc_msg;
     double des_yaw;
     ros::Timer control_update_timer;
     double ground_truth_first_deri_x = 0, ground_truth_first_deri_y = 0, ground_truth_first_deri_z = 0;
     double ground_truth_x = 0, ground_truth_y = 0, ground_truth_z = 0;
-    double last_time = 0;
-    bool keep_in_land = false;
 
 public:
     TripleAxisController()
@@ -375,7 +265,6 @@ public:
         ground_truth_sub = nh.subscribe("/mavros/local_position/velocity_local", 10, &TripleAxisController::ground_truth_callback, this);
         ground_truth_pose_sub = nh.subscribe("/vrpn_client_node/MCServer/5/pose", 10, &TripleAxisController::ground_truth_pose_callback, this);
         pub_hat_x = nh.advertise<std_msgs::Float64MultiArray>("/hat_x_topic", 100);
-        pub_land = nh.advertise<std_msgs::Bool>("/flight_land", 1);
         acc_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/acc_cmd", 1);
         control_update_timer = nh.createTimer(ros::Duration(0.01), &TripleAxisController::controlUpdate, this);
     }
@@ -383,21 +272,20 @@ public:
     void callback(const std_msgs::Float64MultiArray::ConstPtr &msg)
     {
         // Update the controller for each axis
-        last_time = ros::Time::now().toSec();
         des_yaw = msg->data[5];
         std::clock_t start = std::clock();
         controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
         controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 0, 1);
-        controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2); // Constant height tracking
+        controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2);
         std::clock_t end = std::clock();
-        // 计算并输出执行时间（以毫秒为单位）
+        //  计算并输出执行时间（以毫秒为单位）
         double duration = 1000 * double(end - start) / CLOCKS_PER_SEC;
-        cout << duration << endl;
+        cout << iterations << endl;
         if (iterations == 0)
         {
             output_file << "Iterations,Execution Time (ms)\n"; // 写入表头
         }
-        else if (iterations <= 10000)
+        else if (iterations <= 5000)
         {
             output_file << iterations << "," << duration << "\n";
         }
@@ -459,7 +347,7 @@ public:
         msg1.data[3] = controllerX.y_real;
         msg1.data[4] = -ground_truth_first_deri_x;
         msg1.data[5] = ground_truth_first_deri_x;
-        msg1.data[6] = controllerX.y_filtered_deri;
+        msg1.data[6] = 0;
         msg1.data[7] = ground_truth_first_deri_x;
         msg1.data[8] = ground_truth_x;
 
@@ -467,7 +355,7 @@ public:
         msg1.data[12] = controllerY.y_real;
         msg1.data[13] = -ground_truth_first_deri_y;
         msg1.data[14] = ground_truth_first_deri_y;
-        msg1.data[15] = controllerY.y_filtered_deri;
+        msg1.data[15] = 0;
         msg1.data[16] = ground_truth_first_deri_y;
         msg1.data[17] = ground_truth_y;
 
@@ -475,7 +363,7 @@ public:
         msg1.data[21] = controllerZ.y_real;
         msg1.data[22] = -ground_truth_first_deri_z;
         msg1.data[23] = ground_truth_first_deri_z;
-        msg1.data[24] = controllerZ.y_filtered_deri;
+        msg1.data[24] = 0;
         msg1.data[25] = ground_truth_first_deri_z;
         msg1.data[26] = ground_truth_z;
         pub_hat_x.publish(msg1);
