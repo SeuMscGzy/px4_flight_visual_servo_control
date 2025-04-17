@@ -10,9 +10,9 @@ public:
     ImageToVideo()
     {
         image_transport::ImageTransport it(nh);
-        sub = it.subscribe("camera/image", 1, &ImageToVideo::imageCallback, this);
+        sub = it.subscribe("/camera_rect/image_rect", 1, &ImageToVideo::imageCallback, this);
 
-        video_writer = cv::VideoWriter("output.avi", cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 10, cv::Size(640, 480));
+        video_writer = cv::VideoWriter("output.avi", cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 20, cv::Size(640, 480));
     }
 
     void imageCallback(const sensor_msgs::ImageConstPtr &msg)
