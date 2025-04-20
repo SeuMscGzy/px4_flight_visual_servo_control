@@ -79,7 +79,7 @@ class AcadosTrackingNode:
         self.control_pub.publish(acc_msg)
         msgx = Float64()
         msgx.data = self.u0[0]
-        self.x_pub.publish(msgx)
+        # self.x_pub.publish(msgx)
         # 发布hat_x消息（Float64MultiArray类型）
         msg1 = Float64MultiArray()
         msg1.data = [0.0] * 27  # 初始化为27个0.0
