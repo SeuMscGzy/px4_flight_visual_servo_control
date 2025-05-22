@@ -32,11 +32,11 @@ private:
     /*const double k_i = -4;
     const double k_p = -3.7;
     const double k_d = -4;*/
-    const double k_i = -4;
-    const double k_p = -5;
-    const double k_d = -3.7;
+    double k_i = -0.3;
+    double k_p = -4.2;
+    double k_d = -2.9;
     const double T_c = 0.05;
-    double x_bias = -1;
+    double x_bias = -0.9;
     double y_bias = 0;
     double z_bias = -0.1;
     double y1_real_bias = 0;
@@ -44,36 +44,8 @@ private:
     ros::Subscriber number_sub;
 
 public:
-    SingleAIC2Controller() // 构造函数
+    SingleAIC2Controller()
     {
-        // 初始化数字话题的订阅器
-        number_sub = nh.subscribe("/bias_number", 10, &SingleAIC2Controller::numberCallback, this, ros::TransportHints().tcpNoDelay());
-    }
-
-    void numberCallback(const std_msgs::Int32::ConstPtr &msg)
-    {
-        int number = msg->data;
-        switch (number)
-        {
-        case 1:
-            // 恢复初始值
-            x_bias = -0.3;
-            y_bias = -0.3;
-            z_bias = 1;
-            break;
-        case 2:
-            // 将所有 bias 置零
-            x_bias = 0;
-            y_bias = 0;
-            z_bias = 1;
-            break;
-        default:
-            // 默认情况下，也恢复初始值
-            x_bias = -0.3;
-            y_bias = -0.3;
-            z_bias = 1;
-            break;
-        }
     }
 
     double adjustBias(double value, int which_axis, bool use_bias) // which_axis: 0 for x, 1 for y, 2 for z
@@ -100,7 +72,7 @@ public:
     }
     double limitControl(double controlValue, int which_axis)
     {
-        double limit = (which_axis != 2) ? 3 : 3; // Limit is 3 for x and y, 4 for z axis.
+        double limit = (which_axis != 2) ? 5 : 5; // Limit is 3 for x and y, 4 for z axis.
         if (abs(controlValue) >= limit)
         {
             controlValue = limit * controlValue / abs(controlValue); // Apply limit
@@ -109,7 +81,7 @@ public:
     }
     double limitIntegral(double IntegralValue, int which_axis)
     {
-        double limit = (which_axis != 2) ? 2 : 2; // Limit is 1.5 for x and y, 2 for z axis.
+        double limit = (which_axis != 2) ? 1 : 1; // Limit is 1.5 for x and y, 2 for z axis.
         if (abs(IntegralValue) >= limit)
         {
             IntegralValue = limit * IntegralValue / abs(IntegralValue); // Apply limit
@@ -124,8 +96,7 @@ public:
         mu_p = double(mu_p_last + T_c * (k_l * sigma_z2_inv * (y2_derivative_sampling - mu_p_last) - k_l * sigma_w1_inv * (mu_p_last + e_1 * mu_last) - k_l * sigma_w2_inv * e_2 * e_2 * mu_p_last));
         mu_last = mu;
         mu_p_last = mu_p;
-        u_last = double(u_last - T_c * (k_i * (y1_real_bias - mu) + k_p * (y2_derivative_sampling - mu_p)));
-        u_last = limitIntegral(u_last, which_axis);
+        u_last = double(u_last - T_c * (k_i * (y1_real_bias - mu)) + k_p * (y1_real_bias - mu));
         u = u_last - k_d * y2_derivative_sampling;
         u = limitControl(u, which_axis);
     }
@@ -232,7 +203,7 @@ public:
           mu_p(0.0),
           mu_last(0.0),
           mu_p_last(0.0),
-          filter_for_img(0.9),
+          filter_for_img(0.95),
           // filter_for_deri(20, 3),
           y_filtered_deri(0),
           loss_target(true),
@@ -303,8 +274,6 @@ public:
 class TripleAxisController
 {
 private:
-    std::ofstream output_file; // 用于写入数据的文件
-    int iterations;            // 迭代次数
     MyController controllerX, controllerY, controllerZ;
     ros::NodeHandle nh;
     ros::Subscriber sub, ground_truth_sub, ground_truth_second_sub, ground_truth_pose_sub;
@@ -319,12 +288,11 @@ private:
 public:
     // 构造函数
     TripleAxisController()
-        : nh("~"), des_yaw(0), iterations(0)
+        : nh("~"), des_yaw(0)
     {
-        output_file.open("execution_times.csv");
         sub = nh.subscribe("/point_with_fixed_delay", 1, &TripleAxisController::callback, this);
         ground_truth_sub = nh.subscribe("/mavros/local_position/velocity_local", 10, &TripleAxisController::ground_truth_callback, this);
-        ground_truth_pose_sub = nh.subscribe("/vrpn_client_node/MCServer/5/pose", 10, &TripleAxisController::ground_truth_pose_callback, this);
+        ground_truth_pose_sub = nh.subscribe("/vrpn_client_node/cf1/0/pose", 10, &TripleAxisController::ground_truth_pose_callback, this);
         pub_hat_x = nh.advertise<std_msgs::Float64MultiArray>("/hat_x_topic", 100);
         pub_land = nh.advertise<std_msgs::Bool>("/flight_land", 1);
         acc_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/acc_cmd", 1);
@@ -332,33 +300,11 @@ public:
 
     void callback(const std_msgs::Float64MultiArray::ConstPtr &msg)
     {
-        // 更新每个轴的控制器
-        // cout << "Time spent: " << 1000 * (ros::Time::now().toSec() - msg->data[3]) << " ms" << endl;
-        // cout << "运行间隔时间: " << 1000 * (ros::Time::now().toSec() - last_time) << " ms" << endl;
-        last_time = ros::Time::now().toSec();
         des_yaw = msg->data[5];
 
-        std::clock_t start = std::clock();
         controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
         controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 0, 1);
         controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2); // Constant height tracking
-        std::clock_t end = std::clock();
-        // 计算并输出执行时间（以毫秒为单位）
-        double duration = 1000 * double(end - start) / CLOCKS_PER_SEC;
-        cout << iterations << endl;
-        if (iterations == 0)
-        {
-            output_file << "Iterations,Execution Time (ms)\n"; // 写入表头
-        }
-        else if (iterations <= 5000)
-        {
-            output_file << iterations << "," << duration << "\n";
-        }
-        else
-        {
-            output_file.close(); // 关闭文件
-        }
-        iterations++;
 
         acc_msg.position.x = 0;
         acc_msg.position.y = 0;

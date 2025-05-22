@@ -30,14 +30,11 @@ private:
     const double sigma_z2_inv = 1.0;
     const double sigma_w1_inv = 1.0;
     const double sigma_w2_inv = 1.0;
-    /*    double k_i = -0.5;
-    double k_p = -5;
-    double k_d = -3;*/
-    double k_i = -0.5;
-    double k_p = -5.1;
+    double k_i = -0.3;
+    double k_p = -4.5;
     double k_d = -3;
     const double T_c = 0.01;
-    double x_bias = -1;
+    double x_bias = -0.9;
     double y_bias = 0;
     double z_bias = -0.1;
     double y1_APO_fast_bias = 0;
@@ -47,10 +44,9 @@ private:
     std::vector<double> trust_array_y2 = {0.5, 0.5, 0.5, 0.5, 0.5};
 
 public:
-    AIC2Controller() // 构造函数
+    AIC2Controller()
     {
     }
-
 
     double adjustBias(double value, int which_axis, bool use_bias) // which_axis: 0 for x, 1 for y, 2 for z
     {
@@ -77,7 +73,7 @@ public:
 
     double limitControl(double controlValue, int which_axis)
     {
-        double limit = (which_axis != 0) ? 3 : 3; // Limit is 3 for y and z, 1.5 for x axis.
+        double limit = (which_axis != 0) ? 5 : 5; // Limit is 3 for y and z, 1.5 for x axis.
         if (abs(controlValue) >= limit)
         {
             controlValue = limit * controlValue / abs(controlValue); // Apply limit
@@ -105,23 +101,9 @@ public:
         mu_p = double(mu_p_last + T_c * ((1 - trust_param_y2) * k_l * sigma_z2_inv * (y2_APO_fast - mu_p_last) + trust_param_y2 * k_l * sigma_z2_inv * (y2_derivative_sampling - mu_p_last) - k_l * sigma_w1_inv * (mu_p_last + e_1 * mu_last) - k_l * sigma_w2_inv * e_2 * e_2 * mu_p_last));
         mu_last = mu;
         mu_p_last = mu_p;
-        u_last = double(u_last - T_c * (k_i * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu)) - k_p * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu))));
-        u_last = limitIntegral(u_last, which_axis);
+        u_last = double(u_last - T_c * (k_i * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu)) + k_p * ((1 - trust_param_y1) * (y1_APO_fast_bias - mu) + trust_param_y1 * (y1_real_bias - mu))));
         u = u_last - k_d * (1 - trust_param_y2) * y2_APO_fast - k_d * trust_param_y2 * y2_derivative_sampling;
         u = limitControl(u, which_axis);
-        // cout << which_axis << ": " << u_last << " " << mu << " " << mu_p << " " << u << endl;
-        /*if (which_axis == 0)
-        {
-            cout << "x_bias: " << x_bias << endl;
-        }
-        else if (which_axis == 1)
-        {
-            cout << "y_bias: " << y_bias << endl;
-        }
-        else
-        {
-            cout << "z_bias: " << z_bias << endl;
-        }*/
     }
 };
 
@@ -203,7 +185,6 @@ private:
     ros::NodeHandle nh;
     ros::Timer timer;
 
-    // ButterworthLowPassFilter filter_for_deri; // 二阶巴特沃斯LPF
     LowPassFilter filter_for_img;
     AIC2Controller aic2controller;
     // Iir::Butterworth::LowPass<4> filter_4_for_img;
@@ -235,7 +216,7 @@ public:
           mu_last(0.0),
           mu_p_last(0.0),
           timer_count(0),
-          filter_for_img(0.9),
+          filter_for_img(0.95),
           // filter_for_deri(20, 3),
           y_filtered_deri(0),
           loss_target(true),
@@ -318,16 +299,15 @@ public:
             if (timer_count == 0)
             {
                 predict_y = y_real;
-                u = 0;
                 hat_x = A_bar * hat_x_last + B0 * u + C_bar * predict_y;
                 aic2controller.computeControl(timer_count, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, mu, mu_p, use_bias, which_axis);
             }
             else
             {
                 Eigen::Vector2d coeff(1, 0);
-                u = 0;
                 predict_y = coeff.transpose() * (A0 * hat_x_last + B0 * u);
                 hat_x = A_bar * hat_x_last + B_bar * u + C_bar * predict_y;
+                // hat_x = A_bar * hat_x_last + B_bar * u + C_bar * predict_y;
                 aic2controller.computeControl(timer_count, y_real, hat_x(0), y_filtered_deri, hat_x(1), mu_last, mu_p_last, u_last, u, mu, mu_p, use_bias, which_axis);
             }
         }
@@ -352,8 +332,6 @@ public:
 class TripleAxisController
 {
 private:
-    std::ofstream output_file; // 用于写入数据的文件
-    int iterations;            // 迭代次数
     MyController controllerX, controllerY, controllerZ;
     ros::NodeHandle nh;
     ros::Subscriber sub, ground_truth_sub, ground_truth_second_sub, ground_truth_pose_sub;
@@ -368,12 +346,11 @@ private:
 
 public:
     TripleAxisController()
-        : nh("~"), des_yaw(0), iterations(0)
+        : nh("~"), des_yaw(0)
     {
-        output_file.open("execution_times.csv");
         sub = nh.subscribe("/point_with_fixed_delay", 1, &TripleAxisController::callback, this, ros::TransportHints().tcpNoDelay());
         ground_truth_sub = nh.subscribe("/mavros/local_position/velocity_local", 10, &TripleAxisController::ground_truth_callback, this);
-        ground_truth_pose_sub = nh.subscribe("/vrpn_client_node/MCServer/5/pose", 10, &TripleAxisController::ground_truth_pose_callback, this);
+        ground_truth_pose_sub = nh.subscribe("/vrpn_client_node/cf1/0/pose", 10, &TripleAxisController::ground_truth_pose_callback, this);
         pub_hat_x = nh.advertise<std_msgs::Float64MultiArray>("/hat_x_topic", 100);
         pub_land = nh.advertise<std_msgs::Bool>("/flight_land", 1);
         acc_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/acc_cmd", 1);
@@ -385,27 +362,9 @@ public:
         // Update the controller for each axis
         last_time = ros::Time::now().toSec();
         des_yaw = msg->data[5];
-        std::clock_t start = std::clock();
         controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
         controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 0, 1);
         controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2); // Constant height tracking
-        std::clock_t end = std::clock();
-        // 计算并输出执行时间（以毫秒为单位）
-        double duration = 1000 * double(end - start) / CLOCKS_PER_SEC;
-        cout << duration << endl;
-        if (iterations == 0)
-        {
-            output_file << "Iterations,Execution Time (ms)\n"; // 写入表头
-        }
-        else if (iterations <= 10000)
-        {
-            output_file << iterations << "," << duration << "\n";
-        }
-        else
-        {
-            output_file.close(); // 关闭文件
-        }
-        iterations++;
     }
 
     void ground_truth_callback(const geometry_msgs::TwistStamped::ConstPtr &msg)

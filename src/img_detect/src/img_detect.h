@@ -65,10 +65,8 @@ public:
     rs2::config config;
     vpCameraParameters cam;
     vpDetectorAprilTag tag_detector;
-    // 将 cv::Mat rvec 和 tvec 作为类成员变量用于复用内存
 
     std_msgs::Float64MultiArray point_;
-    // 构造函数与析构函数
     ObjectDetector(ros::NodeHandle &nh);
     ~ObjectDetector();
     void start();

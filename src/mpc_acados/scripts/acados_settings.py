@@ -33,8 +33,8 @@ def acados_settings(Tf, N):
     ocp.dims.N = N
 
     # set cost 
-    Q = np.diag([3, 3, 3, 1, 1, 1])
-    R = 0.3 * np.eye(nu)
+    Q = np.diag([4.1, 4.1, 4.1, 2, 2, 2])
+    R = 0.1 * np.eye(nu)
 
     Qe = Q
 
@@ -48,14 +48,12 @@ def acados_settings(Tf, N):
     ocp.cost.W   = scipy.linalg.block_diag(Q,R)
     ocp.cost.W_e = Qe
 
-    # 构造状态到输出的映射矩阵 Vx
     Vx = np.zeros((ny, nx))
     Vx[:nx, :] = np.eye(nx)
     ocp.cost.Vx = Vx
 
-    # 构造控制输入到输出的映射矩阵 Vu
     Vu = np.zeros((ny, nu))
-    # 将控制输入对应的身份映射置于 Vx 之后的那部分行上
+
     Vu[nx:nx+nu, :] = np.eye(nu)
     ocp.cost.Vu = Vu
 

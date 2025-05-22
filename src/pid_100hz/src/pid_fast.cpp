@@ -22,11 +22,11 @@ using namespace std;
 class PIDController
 {
 private:
-    double k_i = 0.5;
-    double k_p = 4;
+    double k_i = 0.3;
+    double k_p = 4.2;
     double k_d = 3;
     const double T_c = 0.01;
-    double x_bias = -1;
+    double x_bias = -0.9;
     double y_bias = 0;
     double z_bias = -0.1;
     double y1_fast_bias = 0;
@@ -214,13 +214,11 @@ public:
         {
             if (timer_count == 0)
             {
-                u_last = 0;
                 hat_x = A_bar * hat_x_last + B0 * u_last + C_bar * y_real;
                 pidcontroller.computeControl(hat_x(0), hat_x(1), use_bias, which_axis, u);
             }
             else
             {
-                u_last = 0;
                 hat_x = A0 * hat_x_last + B0 * u_last;
                 pidcontroller.computeControl(hat_x(0), hat_x(1), use_bias, which_axis, u);
             }
@@ -244,8 +242,6 @@ public:
 class TripleAxisController
 {
 private:
-    //std::ofstream output_file; // 用于写入数据的文件
-    //int iterations;            // 迭代次数
     MyController controllerX, controllerY, controllerZ;
     ros::NodeHandle nh;
     ros::Subscriber sub, ground_truth_sub, ground_truth_pose_sub;
@@ -260,10 +256,10 @@ public:
     TripleAxisController()
         : nh("~"), des_yaw(0)
     {
-        //output_file.open("execution_times.csv");
+        // output_file.open("execution_times.csv");
         sub = nh.subscribe("/point_with_fixed_delay", 1, &TripleAxisController::callback, this, ros::TransportHints().tcpNoDelay());
         ground_truth_sub = nh.subscribe("/mavros/local_position/velocity_local", 10, &TripleAxisController::ground_truth_callback, this);
-        ground_truth_pose_sub = nh.subscribe("/vrpn_client_node/MCServer/5/pose", 10, &TripleAxisController::ground_truth_pose_callback, this);
+        ground_truth_pose_sub = nh.subscribe("/vrpn_client_node/cf1/0/pose", 10, &TripleAxisController::ground_truth_pose_callback, this);
         pub_hat_x = nh.advertise<std_msgs::Float64MultiArray>("/hat_x_topic", 100);
         acc_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/acc_cmd", 1);
         control_update_timer = nh.createTimer(ros::Duration(0.01), &TripleAxisController::controlUpdate, this);
@@ -273,27 +269,10 @@ public:
     {
         // Update the controller for each axis
         des_yaw = msg->data[5];
-        //std::clock_t start = std::clock();
+        // std::clock_t start = std::clock();
         controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
         controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 0, 1);
         controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2);
-        //std::clock_t end = std::clock();
-        //  计算并输出执行时间（以毫秒为单位）
-        //double duration = 1000 * double(end - start) / CLOCKS_PER_SEC;
-        //cout << iterations << endl;
-        /*if (iterations == 0)
-        {
-            output_file << "Iterations,Execution Time (ms)\n"; // 写入表头
-        }
-        else if (iterations <= 5000)
-        {
-            output_file << iterations << "," << duration << "\n";
-        }
-        else
-        {
-            output_file.close(); // 关闭文件
-        }
-        iterations++;*/
     }
 
     void ground_truth_callback(const geometry_msgs::TwistStamped::ConstPtr &msg)

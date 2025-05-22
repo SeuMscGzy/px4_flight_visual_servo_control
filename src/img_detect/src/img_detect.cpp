@@ -9,7 +9,6 @@ void flipImage(vpImage<T> &src, vpImage<T> &dst, int flipCode)
 
   if (flipCode == 0)
   {
-    // 垂直翻转
     for (unsigned int i = 0; i < src.getHeight(); ++i)
     {
       for (unsigned int j = 0; j < src.getWidth(); ++j)
@@ -20,7 +19,6 @@ void flipImage(vpImage<T> &src, vpImage<T> &dst, int flipCode)
   }
   else if (flipCode > 0)
   {
-    // 水平翻转
     for (unsigned int i = 0; i < src.getHeight(); ++i)
     {
       for (unsigned int j = 0; j < src.getWidth(); ++j)
@@ -31,7 +29,6 @@ void flipImage(vpImage<T> &src, vpImage<T> &dst, int flipCode)
   }
   else
   {
-    // 同时水平和垂直翻转
     for (unsigned int i = 0; i < src.getHeight(); ++i)
     {
       for (unsigned int j = 0; j < src.getWidth(); ++j)
@@ -42,7 +39,7 @@ void flipImage(vpImage<T> &src, vpImage<T> &dst, int flipCode)
   }
   // cout << "1" << endl;
 }
-// 常量定义
+
 constexpr double PROCESSING_LATENCY = 0.04; // 40ms处理延迟
 const Eigen::Vector3d POS_OFFSET{0.00625, -0.08892, 0.06430};
 ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
@@ -60,7 +57,6 @@ ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
   tag_detector.setAprilTagFamily(vpDetectorAprilTag::TAG_36h11);
   tag_detector.setZAlignedWithCameraAxis(false);
 
-  // 坐标系初始化
   Position_before = Eigen::Vector3d::Zero();
   Position_after = Eigen::Vector3d::Zero();
   R_i2c << 0.00400, -0.03121, 0.99950,
@@ -68,7 +64,6 @@ ObjectDetector::ObjectDetector(ros::NodeHandle &nh)
       -0.00762, -0.99948, -0.03118;
   R_w2c = R_i2c;
 
-  // ROS组件初始化
   point_pub_ = nh_.advertise<std_msgs::Float64MultiArray>("/point_with_fixed_delay", 1, true);
   odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("/mavros/local_position/odom", 1, &ObjectDetector::odomCallback, this, ros::TransportHints().tcpNoDelay());
   image_pub = nh.advertise<sensor_msgs::Image>("/camera_rect/image_rect", 1);
@@ -81,7 +76,6 @@ ObjectDetector::~ObjectDetector()
   stop_thread.store(true, std::memory_order_release);
   cv.notify_all();
 
-  // 停止相机流
   if (worker_thread.joinable())
   {
     worker_thread.join();
@@ -114,7 +108,7 @@ void ObjectDetector::baseProcess(ros::Time ts, bool is_fault)
 {
   const auto delay =
       ros::Duration(PROCESSING_LATENCY) - (ros::Time::now() - ts);
-  //cout << "Processing delay: " << delay.toSec() << " seconds." << endl;
+  // cout << "Processing delay: " << delay.toSec() << " seconds." << endl;
   if (delay > ros::Duration(0))
   {
     this_thread::sleep_for(
@@ -146,30 +140,26 @@ void ObjectDetector::processImages()
     Eigen::Matrix3d R_w2c_temp;
     {
       unique_lock<std::mutex> lock(data_mutex);
-      // 等待 processing 标志或退出标志
       cv.wait(lock, [&]
               { return processing.load(std::memory_order_acquire) ||
                        stop_thread.load(std::memory_order_acquire); });
       if (stop_thread.load(std::memory_order_acquire))
         break;
-      // 复制共享变量，然后释放锁
       R_w2c_temp = R_w2c;
-    } // 锁在此处释放
+    }
     try
     {
       vpImage<unsigned char> I;
       g.acquire(I);
       ros::Time image_timestamp = ros::Time::now();
       vpImage<unsigned char> flippedImage;
-      flipImage(I, flippedImage, -1); // 假设-1表示同时水平和垂直翻转
+      flipImage(I, flippedImage, -1);
       I = flippedImage;
       cv::Mat imageMat;
-      // 使用Visp的函数将vpImage转换为cv::Mat
       vpImageConvert::convert(I, imageMat);
 
       std_msgs::Header header;
       header.stamp = ros::Time::now();
-      //  现在你可以使用cv_bridge将cv::Mat转换为sensor_msgs/Image了
       sensor_msgs::ImagePtr msg = cv_bridge::CvImage(header, "mono8", imageMat).toImageMsg();
       image_pub.publish(msg);
 
@@ -184,17 +174,12 @@ void ObjectDetector::processImages()
       }
       Position_before[0] = cMo_vec[0][0][3];
       Position_before[1] = cMo_vec[0][1][3];
-      Position_before[2] = cMo_vec[0][2][3]; // 位置坐标
-      // 应用位置偏移
+      Position_before[2] = cMo_vec[0][2][3];
       Position_before += POS_OFFSET;
-      // 转换到世界坐标系
       Position_after = R_w2c_temp * Position_before;
       cout << "Position_after: " << Position_after.transpose() << endl;
-      // 更新状态
       desired_yaw = 0;
-      // cout << "yaw: " << yaw << endl;
       lost_target = false;
-      // 后续处理
       baseProcess(image_timestamp, false);
     }
     catch (const std::exception &e)

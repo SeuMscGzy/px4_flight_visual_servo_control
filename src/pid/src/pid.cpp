@@ -14,26 +14,23 @@
 #include <geometry_msgs/AccelStamped.h>
 #include <nav_msgs/Odometry.h>
 #include <Iir.h>
-#include <iostream>
-#include <fstream>
-#include <ctime>
 using namespace std;
 
 class PID2Controller
 {
 private:
-    const double k_i = 0.2;
+    const double k_i = 0.3;
     const double k_p = 4;
-    const double k_d = 4;
+    const double k_d = 2.9;
     const double T_c = 0.05;
-    double x_bias = -1;
+    double x_bias = -0.9;
     double y_bias = 0;
     double z_bias = -0.1;
     double y1_real_bias = 0;
     ros::NodeHandle nh;
 
 public:
-    PID2Controller() // 构造函数
+    PID2Controller()
     {
     }
 
@@ -62,7 +59,7 @@ public:
 
     double limitControl(double controlValue, int which_axis)
     {
-        double limit = (which_axis != 2) ? 3 : 3; // Limit is 3 for x and y, 4 for z axis.
+        double limit = (which_axis != 2) ? 5 : 5;
         if (abs(controlValue) >= limit)
         {
             controlValue = limit * controlValue / abs(controlValue); // Apply limit
@@ -112,8 +109,8 @@ public:
 class ButterworthLowPassFilter
 {
 private:
-    double fs; // 采样频率
-    double fc; // 截止频率
+    double fs;
+    double fc;
     double a0, a1, a2, b1, b2;
     double prevX1, prevX2, prevY1, prevY2;
 
@@ -162,7 +159,6 @@ private:
     bool first_time_in_fun, loss_target, use_bias_;
     ros::NodeHandle nh;
 
-    // ButterworthLowPassFilter filter_for_deri; // 二阶巴特沃斯LPF
     LowPassFilter filter_for_img;
     PID2Controller pid2controller;
     ros::Subscriber px4_state_sub;
@@ -173,7 +169,6 @@ private:
     Iir::Butterworth::LowPass<2> filter_4_for_deri;
 
 public:
-    // 构造函数
     MyController()
         : nh("~"),
           px4_state(1),
@@ -184,7 +179,7 @@ public:
           time_now(0.0),
           time_last(0.0),
           time_pass(0.0),
-          filter_for_img(0.9),
+          filter_for_img(0.95),
           // filter_for_deri(20, 3),
           y_filtered_deri(0),
           integral_error(0),
@@ -217,11 +212,11 @@ public:
 
     void function(double loss_or_not, bool use_bias, int which_axis)
     {
-        if (loss_or_not == 1 && loss_target == false) // 从能看到目标到看不到目标
+        if (loss_or_not == 1 && loss_target == false)
         {
             loss_target = true;
         }
-        if (loss_or_not == 0 && loss_target == true) // 从不能看到目标到能看到目标
+        if (loss_or_not == 0 && loss_target == true)
         {
             loss_target = false;
             first_time_in_fun = true;
@@ -242,7 +237,7 @@ public:
     void StateCallback(const std_msgs::Int32::ConstPtr &msg)
     {
         px4_state = msg->data;
-        if (msg->data != 3) // 不在cmd模式下时，控制量为0；
+        if (msg->data != 3)
         {
             u = 0;
             integral_error = 0;
@@ -253,8 +248,6 @@ public:
 class TripleAxisController
 {
 private:
-    std::ofstream output_file; // 用于写入数据的文件
-    int iterations;            // 迭代次数
     MyController controllerX, controllerY, controllerZ;
     ros::NodeHandle nh;
     ros::Subscriber sub, ground_truth_sub, ground_truth_second_sub, ground_truth_pose_sub;
@@ -269,43 +262,23 @@ private:
 public:
     // 构造函数
     TripleAxisController()
-        : nh("~"), des_yaw(0), iterations(0)
+        : nh("~"), des_yaw(0)
     {
-        output_file.open("execution_times.csv");
         x_pub = nh.advertise<std_msgs::Float64>("/input_x_axis", 100);
         sub = nh.subscribe("/point_with_fixed_delay", 1, &TripleAxisController::callback, this);
         ground_truth_sub = nh.subscribe("/mavros/local_position/velocity_local", 10, &TripleAxisController::ground_truth_callback, this);
-        ground_truth_pose_sub = nh.subscribe("/vrpn_client_node/MCServer/5/pose", 10, &TripleAxisController::ground_truth_pose_callback, this);
+        ground_truth_pose_sub = nh.subscribe("/vrpn_client_node/cf1/0/pose", 10, &TripleAxisController::ground_truth_pose_callback, this);
         pub_hat_x = nh.advertise<std_msgs::Float64MultiArray>("/hat_x_topic", 100);
         acc_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/acc_cmd", 1);
     }
 
     void callback(const std_msgs::Float64MultiArray::ConstPtr &msg)
     {
-        // 更新每个轴的控制器
         des_yaw = 0;
 
-        // std::clock_t start = std::clock();
         controllerX.cal_single_axis_ctrl_input(msg->data[0], msg->data[4], 1, 0);
         controllerY.cal_single_axis_ctrl_input(msg->data[1], msg->data[4], 0, 1);
-        controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2); // Constant height tracking
-        // std::clock_t end = std::clock();
-        //  计算并输出执行时间（以毫秒为单位）
-        // double duration = 1000 * double(end - start) / CLOCKS_PER_SEC;
-        // cout << iterations << endl;
-        // if (iterations == 0)
-        //{
-        // output_file << "Iterations,Execution Time (ms)\n"; // 写入表头
-        // }
-        // else if (iterations <= 5000)
-        //{
-        //   output_file << iterations << "," << duration << "\n";
-        // }
-        // else
-        //{
-        //  output_file.close(); // 关闭文件
-        //// }
-        // iterations++;
+        controllerZ.cal_single_axis_ctrl_input(msg->data[2], msg->data[4], 1, 2);
 
         std_msgs::Float64 input_data_msg;
         input_data_msg.data = controllerX.u;
@@ -330,18 +303,7 @@ public:
 
         std_msgs::Float64MultiArray msg1;
         msg1.data.resize(27);
-        for (int i = 0; i < 2; i++)
-        {
-            msg1.data[i] = 0;
-        }
-        for (int i = 9; i < 11; i++)
-        {
-            msg1.data[i] = 0;
-        }
-        for (int i = 18; i < 20; i++)
-        {
-            msg1.data[i] = 0;
-        }
+
         msg1.data[2] = controllerX.u;
         msg1.data[3] = controllerX.y_real;
         msg1.data[4] = -ground_truth_first_deri_x;
