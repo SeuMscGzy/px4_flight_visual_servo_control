@@ -2,13 +2,13 @@
 #include <Eigen/Core>
 using namespace std;
 
-int pos_vel_control_counter = 0; // 位置速度控制器的计数器
-const double dt = 0.02;          // 速度控制循环的时间间隔，50Hz
+int pos_vel_control_counter = 0; // Position-velocity controller's counter.
+const double dt = 0.02;          // Time interval of the velocity control loop: 50 Hz
 double desire_v_x = 0;
 double desire_v_y = 0;
 double desire_v_z = 0;
-const double position_controller_gain_horizontal = 0.9; // 水平位置比环例控制增益
-const double position_controller_gain_vertical = 1;     // 水平位置比环例控制增益
+const double position_controller_gain_horizontal = 0.9; // Horizontal position proportional control gain
+const double position_controller_gain_vertical = 1;     // Vertical position proportional control gain
 Eigen::Vector3d des_acc(0.0, 0.0, 0.0);
 Eigen::Vector3d last_des_acc(0.0, 0.0, 0.0);
 Eigen::Vector3d des_vel(0.0, 0.0, 0.0);
@@ -47,9 +47,9 @@ public:
     integral_error = 0;
   }
 };
-PIDController velocity_controller_x(2, 0.4, 0); // x轴速度环PID参数
-PIDController velocity_controller_y(2, 0.4, 0); // y轴速度环PID参数
-PIDController velocity_controller_z(4, 2, 0);   // z轴速度环PID参数
+PIDController velocity_controller_x(2, 0.4, 0);  
+PIDController velocity_controller_y(2, 0.4, 0); 
+PIDController velocity_controller_z(4, 2, 0); 
 
 double LinearControl::fromQuaternion2yaw(Eigen::Quaterniond q)
 {
@@ -112,10 +112,10 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   /*Eigen::Quaterniond q_w_b(odom.q);
   Eigen::Matrix3d R_w_b = q_w_b.toRotationMatrix();
   Eigen::Vector3d body_z_real;
-  // 将旋转矩阵的第三列（索引为2）赋值给vec
+
   body_z_real = R_w_b.col(2);
   body_z_real = body_z_real.normalized();
-  double thrust = des_acc.dot(body_z_real); // 投影到真实的body z
+  double thrust = des_acc.dot(body_z_real); 
   Eigen::Vector3d thr;
   thr(2) = thrust;
   // u.thrust = computeDesiredCollectiveThrustSignal(thr);
@@ -158,14 +158,14 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   {
     in_the_slow_thrust = false;
   }
-  if (last_in_the_slow_thrust == true && in_the_slow_thrust == false && state_count != 3 && !in_landing_) // 缓慢加速起飞
+  if (last_in_the_slow_thrust == true && in_the_slow_thrust == false && state_count != 3 && !in_landing_) // Gradually accelerate for takeoff
   {
     takeoff_count = 0;
   }
   if (takeoff_count < 500)
   {
     takeoff_count++;
-    u.thrust = u.thrust * takeoff_count * 0.01 * 0.2; // 从百分之1逐渐加速到百分之百的推力
+    u.thrust = u.thrust * takeoff_count * 0.01 * 0.2; // Gradually ramp thrust from 1% to 100%
     velocity_controller_x.init();
     velocity_controller_y.init();
     velocity_controller_z.init();
@@ -199,36 +199,6 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   u.q = imu.q * odom.q.inverse() * q_SE3;
   */
   // Eigen::Vector3d euler_angles = q_des.toRotationMatrix().eulerAngles(0, 1, 2);
-  static int counter_for_output = 0;
-  if (counter_for_output % 50 == 0)
-  {
-    // 输出欧拉角
-    // cout << "Euler angles (Roll, Pitch, Yaw): " << euler_angles.transpose() << endl;
-    // cout << "Euler angles_FGao (Roll, Pitch, Yaw): " << roll << " " << pitch << " " << des.yaw << endl;
-
-    // 打印还原的欧拉角（偏航、俯仰、翻滚），注意这里的顺序和原始顺序相反，因为eulerAngles方法的参数是旋转的应用顺序，而不是定义顺序
-    // Eigen::Quaterniond q_rel = q_des * q_des_se3.inverse();
-
-    // 将相对旋转四元数转换为角轴表示
-    // Eigen::AngleAxisd angleAxis(q_rel);
-
-    // 输出旋转角度（弧度）和旋转轴
-    // std::cout << "Rotation angle (radians): " << angleAxis.angle() << std::endl;
-    // std::cout << "Rotation axis: [" << angleAxis.axis().transpose() << "]" << std::endl;
-    // cout << "thrust_FGao: " << u.thrust << endl;
-    // cout << "thrust_SE3: " << thrust << endl;
-    // cout << "Quaternion_FGao: " << q_des.coeffs() << endl;
-    // cout << "Quaternion_SE3: " << q_des_se3.coeffs() << endl;
-    //  cout << "des_acc: " << des_acc.transpose() << endl;
-    //   cout << "des.p[2]: " << des.p[2] << endl;
-    //    cout << "thr2acc_: " << thr2acc_ << endl;
-  }
-  counter_for_output++; // 增加计数器
-  if (counter_for_output >= 100)
-  {
-    counter_for_output = 0;
-  }
-  /* WRITE YOUR CODE HERE */
   if (takeoff_count >= 500)
   {
     timed_thrust_.push(std::pair<ros::Time, double>(ros::Time::now(), u.thrust));
@@ -237,8 +207,6 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   {
     timed_thrust_.pop();
   }
-  // cout << "thr2acc_: " << thr2acc_ << endl;
-  // cout << "takeoff_count: " << takeoff_count << endl;
 
   // used for debug
   debug_msg_.des_v_x = des.v(0);
