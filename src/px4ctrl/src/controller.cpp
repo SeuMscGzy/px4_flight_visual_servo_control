@@ -173,6 +173,7 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   last_in_the_slow_thrust = in_the_slow_thrust;
   last_state_count = state_count;
   last_thrust = u.thrust;
+  // SE(3) in hovering state
   double roll, pitch;
   double yaw_odom = fromQuaternion2yaw(odom.q);
   double sin = std::sin(yaw_odom);
@@ -182,6 +183,21 @@ quadrotor_msgs::Px4ctrlDebug LinearControl::calculateControl(const Desired_State
   // yaw = fromQuaternion2yaw(des.q);
   Eigen::Quaterniond q_des = Eigen::AngleAxisd(des.yaw, Eigen::Vector3d::UnitZ()) * Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()) * Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX());
   u.q = imu.q * odom.q.inverse() * q_des;
+  /*
+  // SE(3)
+  Vector3d b3d = des_acc.normalized();
+  Vector3d a_psi{cos(0), sin(0), 0}; //do not change yaw in the experiment cases
+
+  Vector3d b2d = b3d.cross(a_psi).normalized();
+  Vector3d b1d = b2d.cross(b3d);
+
+  Matrix3d R_d;
+  R_d.col(0) = b1d;
+  R_d.col(1) = b2d;
+  R_d.col(2) = b3d;
+  Quaterniond q_SE3(R_d);
+  u.q = imu.q * odom.q.inverse() * q_SE3;
+  */
   // Eigen::Vector3d euler_angles = q_des.toRotationMatrix().eulerAngles(0, 1, 2);
   static int counter_for_output = 0;
   if (counter_for_output % 50 == 0)
