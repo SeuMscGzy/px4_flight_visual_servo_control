@@ -41,14 +41,14 @@ void PX4CtrlFSM::process()
 	ros::Time now_time = ros::Time::now();
 	Controller_Output_t u;
 	u.thrust = 0;
-	Desired_State_t des(odom_data); // des代表了当前的无人机位姿，利用初始化函数读取里程计信息来给其赋值
+	Desired_State_t des(odom_data); // des represents the current UAV pose and is initialized using odometry data through the constructor function.
 
 	// STEP1: state machine runs
 	switch (state)
 	{
 	case MANUAL_CTRL:
 	{
-		if (rc_data.enter_hover_mode) // Try to jump to AUTO_HOVER 这个变量是怎么赋值的？根据通道的信息来确定吗？
+		if (rc_data.enter_hover_mode) // Try to jump to AUTO_HOVER 
 		{
 			if (!odom_is_received(now_time))
 			{
@@ -68,7 +68,7 @@ void PX4CtrlFSM::process()
 
 			state = AUTO_HOVER;
 			controller.resetThrustMapping();
-			set_hov_with_odom(); // 使用里程计当前的信息进行悬停
+			set_hov_with_odom(); // Use the current odometry information to perform hovering.
 			toggle_offboard_mode(true);
 			ROS_INFO("\033[32m[px4ctrl] MANUAL_CTRL(L1) --> AUTO_HOVER(L2)\033[32m");
 		}
@@ -84,15 +84,14 @@ void PX4CtrlFSM::process()
 		}
 		else if (rc_data.is_command_mode && cmd_is_received(now_time) && loss_target_time_count == 0 && !takeoff_land_data.triggered && !in_landing)
 		{
-			// cout << "进了这里" << endl;
 			if (state_data.current_state.mode == "OFFBOARD")
 			{
 				state = CMD_CTRL;
-				des = get_cmd_des(); // 自主控制需要改的函数
+				des = get_cmd_des(); // Function that needs to be modified for autonomous control
 				ROS_INFO("\033[32m[px4ctrl] AUTO_HOVER(L2) --> CMD_CTRL(L3)\033[32m");
 			}
 		}
-		else // 悬停模式可以用遥控器来悬停，如果遥控器不操作的话就是保持最开始进入悬停时的位置和偏航角
+		else // In hover mode, the UAV can be controlled to hover using the remote controller; if the controller is not operated, it will maintain the position and yaw angle at the moment it entered hover mode.
 		{
 			// cout << "here" << endl;
 			set_hov_with_rc();
@@ -154,7 +153,7 @@ void PX4CtrlFSM::process()
 					}
 					else
 					{
-						toggle_arm_disarm(true); // 解锁
+						toggle_arm_disarm(true); 
 					}
 				} // Try to arm.
 				else
@@ -165,7 +164,7 @@ void PX4CtrlFSM::process()
 					}
 					else
 					{
-						toggle_arm_disarm(false); // 锁
+						toggle_arm_disarm(false); 
 					}
 				} // Try to disarm.
 			}
@@ -313,7 +312,7 @@ Desired_State_t PX4CtrlFSM::get_cmd_des()
 	return des;
 }
 
-void PX4CtrlFSM::set_hov_with_odom() // 得到hov_pose 用惯性系的位置和偏航角来确定悬停的位置和偏航，因为是悬停，所以不涉及速度、加速度以及俯仰角、滚转角等
+void PX4CtrlFSM::set_hov_with_odom() // Obtain hov_pose using the position and yaw angle in the inertial frame to determine the hovering position and yaw. Since this is for hovering, it does not involve velocity, acceleration, pitch, or roll.
 {
 	hover_pose.head<3>() = odom_data.p;
 	hover_pose(3) = get_yaw_from_quaternion(odom_data.q);
@@ -321,17 +320,17 @@ void PX4CtrlFSM::set_hov_with_odom() // 得到hov_pose 用惯性系的位置和�
 	last_set_hover_pose_time = ros::Time::now();
 }
 
-void PX4CtrlFSM::set_hov_with_rc() // 得到hov_pose 用遥控器来决定无人机的悬停位置和偏航角
+void PX4CtrlFSM::set_hov_with_rc() // Obtain hov_pose by using the remote controller to determine the UAV's hovering position and yaw angle.
 {
 	ros::Time now = ros::Time::now();
 	double delta_t = (now - last_set_hover_pose_time).toSec();
 	last_set_hover_pose_time = now;
-	hover_pose(0) += rc_data.ch[1] * param.max_manual_vel * delta_t * (param.rc_reverse.pitch ? -1 : 1);	// 通道1决定俯仰角？
-	hover_pose(1) += rc_data.ch[0] * param.max_manual_vel * delta_t * (param.rc_reverse.roll ? 1 : -1);		// 通道0决定滚转角？
-	hover_pose(2) += rc_data.ch[2] * param.max_manual_vel * delta_t * (param.rc_reverse.throttle ? -1 : 1); // 通道2是油门？
-	hover_pose(3) += rc_data.ch[3] * param.max_manual_vel * delta_t * (param.rc_reverse.yaw ? 1 : -1);		// 通道3是偏航？
+	hover_pose(0) += rc_data.ch[1] * param.max_manual_vel * delta_t * (param.rc_reverse.pitch ? -1 : 1);	// pitch
+	hover_pose(1) += rc_data.ch[0] * param.max_manual_vel * delta_t * (param.rc_reverse.roll ? 1 : -1);		// roll
+	hover_pose(2) += rc_data.ch[2] * param.max_manual_vel * delta_t * (param.rc_reverse.throttle ? -1 : 1); // throttle
+	hover_pose(3) += rc_data.ch[3] * param.max_manual_vel * delta_t * (param.rc_reverse.yaw ? 1 : -1);		// yaw
 
-	if (hover_pose(2) < -0.35) // 不能再往下面走了，已经在地面上了
+	if (hover_pose(2) < -0.35) 
 		hover_pose(2) = -0.35;
 }
 
@@ -371,7 +370,7 @@ bool PX4CtrlFSM::recv_new_odom()
 	return false;
 }
 
-void PX4CtrlFSM::publish_acceleration_ctrl(const Controller_Output_t &u, const ros::Time &stamp) // 发送姿态和力矩指令
+void PX4CtrlFSM::publish_acceleration_ctrl(const Controller_Output_t &u, const ros::Time &stamp) // Send attitude and thrust commands.
 {
 	mavros_msgs::AttitudeTarget msg;
 	msg.header.stamp = stamp;
@@ -398,7 +397,7 @@ void PX4CtrlFSM::publish_trigger(const nav_msgs::Odometry &odom_msg)
 void PX4CtrlFSM::publish_state()
 {
 	std_msgs::Int32 state_msg;
-	state_msg.data = static_cast<int>(state); // 将枚举转换为整数
+	state_msg.data = static_cast<int>(state); 
 	state_pub.publish(state_msg);
 	// state_pub.publish(state);
 }
