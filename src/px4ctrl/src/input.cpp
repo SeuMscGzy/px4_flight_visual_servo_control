@@ -111,7 +111,7 @@ void RC_Data_t::check_validity()
     }
 }
 
-bool RC_Data_t::check_centered() // 滚转角的摇杆在中间
+bool RC_Data_t::check_centered() 
 {
     bool centered = abs(ch[0]) < 1e-5 && abs(ch[0]) < 1e-5 && abs(ch[0]) < 1e-5 && abs(ch[0]) < 1e-5;
     return centered;
