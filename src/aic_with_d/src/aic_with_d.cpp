@@ -96,7 +96,7 @@ public:
         mu_p = double(mu_p_last + T_c * (k_l * sigma_z2_inv * (y2_derivative_sampling - mu_p_last) - k_l * sigma_w1_inv * (mu_p_last + e_1 * mu_last) - k_l * sigma_w2_inv * e_2 * e_2 * mu_p_last));
         mu_last = mu;
         mu_p_last = mu_p;
-        u_last = double(u_last - T_c * (k_i * (y1_real_bias - mu)) + k_p * (y1_real_bias - mu));
+        u_last = double(u_last - T_c * (k_i * (y1_real_bias - mu)) + k_p * (y2_real_bias - mu_p));
         u = u_last - k_d * y2_derivative_sampling;
         u = limitControl(u, which_axis);
     }
