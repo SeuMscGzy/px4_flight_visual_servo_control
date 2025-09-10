@@ -55,11 +55,9 @@ DONT_RUN=1 make px4_sitl gazebo-classic
 
 ## 4) Run startup script
 ```bash
+
 chmod +x ~./start_sitl.sh
 ~./start_sitl.sh
-
-https://github.com/user-attachments/assets/04cc1293-67d2-46f1-b100-477ef9eeabb4
-
 
 ```
 
@@ -72,3 +70,5 @@ rostopic pub -r 10 /cmd_vel geometry_msgs/Twist \
 ```
 
 ![](1d55acfb-629a-44cd-8881-462ef42796b3.png)
+<video src="https://github.com/user-attachments/assets/1280363c-8bf4-4030-85b3-0a5c9be2912a.mp4" controls width="640"></video>
+
