@@ -57,6 +57,10 @@ DONT_RUN=1 make px4_sitl gazebo-classic
 ```bash
 chmod +x ~./start_sitl.sh
 ~./start_sitl.sh
+
+https://github.com/user-attachments/assets/04cc1293-67d2-46f1-b100-477ef9eeabb4
+
+
 ```
 
 ## 5) Control the AprilTag-equipped rover
@@ -66,3 +70,5 @@ rostopic pub -r 10 /cmd_vel geometry_msgs/Twist \
 "{ linear:  {x: 0.5, y: 0.0, z: 0.0},
    angular: {x: 0.0, y: 0.0, z: 0.3} }"
 ```
+
+![](1d55acfb-629a-44cd-8881-462ef42796b3.png)
