@@ -1,0 +1,17 @@
+<?xml version='1.0'?>
+<sdf version='1.6'>
+  <model name='Apriltag0'>
+    <link name='main'>
+      <pose frame=''>0 0 0 0 0 1.57079632679</pose>
+      <visual name="visual">
+        <geometry>
+            <mesh>
+                <scale>0.05 0.05 0.04</scale>
+                <uri>model://Apriltag0/meshes/AprilTags0.dae</uri>
+            </mesh>
+        </geometry>
+      </visual>
+     </link>
+    <static>1</static>
+  </model>
+</sdf>

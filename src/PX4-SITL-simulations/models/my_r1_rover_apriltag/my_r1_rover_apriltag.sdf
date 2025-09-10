@@ -1,0 +1,23 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <model name='my_r1_rover_apriltag'>
+    <include>
+      <uri>model://my_r1_rover</uri>
+    </include>
+    <include>
+      <uri>model://Apriltag0</uri>
+      <pose>0 0 0.12 0 0 0</pose>
+    </include>
+    <joint name="Apriltag0_joint" type="fixed">
+      <child>Apriltag0::main</child>
+      <parent>my_r1_rover::base_link</parent>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <upper>0</upper>
+          <lower>0</lower>
+        </limit>
+      </axis>
+    </joint>
+  </model>
+</sdf>

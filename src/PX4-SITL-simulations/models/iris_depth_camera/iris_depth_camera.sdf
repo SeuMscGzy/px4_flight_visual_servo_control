@@ -1,0 +1,74 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <model name="iris_depth_camera">
+    <!-- 引入 Iris 飞行器模型 -->
+    <include>
+      <uri>model://iris</uri>
+    </include>
+
+    <!-- 在机体底部添加一个向下看的 RGB 相机 -->
+    <link name="camera_link">
+      <!-- 相机相对于 base_link 的位置与姿态：下方，俯视 -->
+      <pose>0 0 0 0 1.5708 0</pose>
+      <!-- 惯性定义 -->
+      <inertial>
+        <mass>0.02</mass>
+        <inertia>
+          <ixx>1e-5</ixx>
+          <iyy>1e-5</iyy>
+          <izz>1e-5</izz>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+
+      <sensor name="rgb_camera" type="camera">
+        <!-- 传感器发布频率（Hz） -->
+        <update_rate>60</update_rate>
+        <always_on>true</always_on>
+        <visualize>false</visualize>
+
+        <camera>
+          <!-- 视场角选取较大，纯粹对比PBVS性能 -->
+          <horizontal_fov>2.443951</horizontal_fov>
+
+          <!-- 图像尺寸和格式 -->
+          <image>
+            <width>1280</width>
+            <height>960</height>
+            <format>R8G8B8</format>
+          </image>
+
+          <!-- 裁剪面 -->
+          <clip>
+            <near>0.1</near>
+            <far>100</far>
+          </clip>
+
+          <!-- 为图像添加高斯噪声 -->
+          <noise>
+            <type>gaussian</type>
+            <mean>0.0</mean>
+            <stddev>0.005</stddev>
+          </noise>
+        </camera>
+
+        <plugin name="rgb_camera_controller" filename="libgazebo_ros_camera.so">
+          <robotNamespace>/iris_rgb_camera</robotNamespace>
+          <cameraName>rgb_camera</cameraName>
+          <imageTopicName>image_raw</imageTopicName>
+          <cameraInfoTopicName>camera_info</cameraInfoTopicName>
+          <frameName>camera_link</frameName>
+          <updateRate>60</updateRate>
+        </plugin>
+      </sensor>
+    </link>
+
+    <!-- 将相机挂到 Iris 主体 -->
+    <joint name="camera_joint" type="fixed">
+      <parent>iris::base_link</parent>
+      <child>camera_link</child>
+    </joint>
+  </model>
+</sdf>
